@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import xml.etree.ElementTree as ET
 import scipy.stats as ss
+import gzip as gzip_lib
 
 def process_instance(el):
     """
@@ -60,11 +61,14 @@ def cumulative_counting(traces):
     return(pd.Series(resp) - 1)
     
 
-def parse_mxml(file, aliases=None, replace_whitespaces="_"):
+def parse_mxml(file, gzip=False, aliases=None, replace_whitespaces="_"):
     """
         Runs all basic prep and return preped DataFrame
     """
-    df = read_mxml(file)
+    if gzip:
+        df = read_mxml(gzip_lib.open(file,'r'))
+    else:
+        df = read_mxml(file)
     
     df["WorkflowModelElement"] = df.WorkflowModelElement.apply(lambda x: x.replace(' ', replace_whitespaces))
     
