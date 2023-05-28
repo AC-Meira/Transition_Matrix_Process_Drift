@@ -19,7 +19,7 @@ def process_instance(el):
     resp = []
     for entry in el[1:]:
         r = {
-            "TraceId": el.get("id")
+            "CaseId": el.get("id")
         }
         for item in entry:
             if item.tag == 'Data':
@@ -69,6 +69,8 @@ def parse_mxml(file, gzip=False, aliases=None, replace_whitespaces="_"):
         df = read_mxml(gzip_lib.open(file,'r'))
     else:
         df = read_mxml(file)
+
+    df = df[df['CaseId'].notnull()]
     
     df["WorkflowModelElement"] = df.WorkflowModelElement.apply(lambda x: x.replace(' ', replace_whitespaces))
     
@@ -78,29 +80,3 @@ def parse_mxml(file, gzip=False, aliases=None, replace_whitespaces="_"):
         df["Activity"] = df.WorkflowModelElement
 
     return df
-
-def log_to_transitions(log):
-
-    """...
-    Args:
-        'frequency_gtest' : {'process_feature':'frequency', 'method':'g_test', 'contingency_matrix_sum_value' : '5', 'remove_zeros':'True'}
-        , 'frequency_cramersv' : {'process_feature':'frequency', 'method':'cramers_v', 'contingency_matrix_sum_value' : '5', 'remove_zeros':'True'}
-    """
-    
-    ### Get next activity to create a from-to representation
-    log_transition = log[['Activity']].rename(columns={"Activity": "From"})
-    log_transition['To'] = log.groupby('Trace_order').shift(-1)['Activity']
-    
-    ### Get trace order identification
-    log_transition['Trace_order'] = log['Trace_order']
-    
-    ### Clean dataset
-    # log_prep["To"] = log_prep["To"].fillna('END')
-    log_transition = log_transition.dropna(axis=0)
-    log_transition = log_transition.reset_index().drop(columns=['index'])
-    
-    ### Get transition order identification 
-    log_transition['Transition_order'] = list(log_transition.index)
-    
-    return log_transition
-

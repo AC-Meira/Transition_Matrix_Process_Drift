@@ -32,7 +32,7 @@ def dingOptimalNumberOfPoints(algo):
 
     return x_lines
 
-def get_cpd_pelt(change_representation_df, detection_feature_params):
+def get_cpd_pelt(self, change_representation_df, detection_feature_params):
 
     """...
     Args:
@@ -43,11 +43,28 @@ def get_cpd_pelt(change_representation_df, detection_feature_params):
     # Get the defined change feature(s) vector and apply a 'smoothing'
     signals = change_representation_df[detection_feature_params['change_features']].rolling(window=int(detection_feature_params['smooth'])).mean().dropna()
     
+    # Define pelt parameters
+    try: model = detection_feature_params['model']
+    except: model = 'rbf'
+
+    try: cost = detection_feature_params['cost']
+    except: cost = 'rpt.costs.CostRbf()'
+
+    try: min_size = detection_feature_params['min_size']
+    except: 
+        if self.overlap == True:
+            min_size = str(int(self.window_size/self.sliding_step))
+        else: 
+             min_size = '1'
+  
+    try: jump = detection_feature_params['jump']
+    except: jump = '1'
+
     # Call pelt algorithm
-    pelt_algo = rpt.Pelt(model = detection_feature_params['model']
-        , min_size = int(detection_feature_params['min_size'])
-        , jump = int(detection_feature_params['jump'])
-        , custom_cost = detection_feature_params['cost']
+    pelt_algo = rpt.Pelt(model = model
+        , min_size = int(min_size)
+        , jump = int(jump)
+        , custom_cost = cost
     ).fit(signals)
 
     # 
@@ -59,7 +76,7 @@ def get_cpd_pelt(change_representation_df, detection_feature_params):
     return result
 
 
-def get_time_series_strategy(change_representation_df_original, detection_task_params_dict):
+def get_time_series_strategy(self, detection_task_params_dict):
 
     """...
     Args:
@@ -78,14 +95,14 @@ def get_time_series_strategy(change_representation_df_original, detection_task_p
 
     """
 
-    change_representation_df = change_representation_df_original.copy()
+    change_representation_df = self.change_representation_df.copy()
 
     # 
     detection_strategy_result_dict = {}
     for detection_feature, detection_feature_params in detection_task_params_dict.items():
 
         try:
-            detection_strategy_result_dict[detection_feature] = getattr(thismodule, "get_" + detection_feature_params['method'])(change_representation_df, detection_feature_params)
+            detection_strategy_result_dict[detection_feature] = getattr(thismodule, "get_" + detection_feature_params['method'])(self, change_representation_df, detection_feature_params)
 
         except AttributeError as e:
             print("Unknown detection feature: ", detection_feature)
@@ -124,7 +141,7 @@ def get_comparison_operator(change_representation_df, detection_feature_params):
     
 
 
-def get_threshold_strategy(change_representation_df_original, detection_task_params_dict):
+def get_threshold_strategy(self, detection_task_params_dict):
 
     """...
     Args:
@@ -143,7 +160,7 @@ def get_threshold_strategy(change_representation_df_original, detection_task_par
 
     """
     
-    change_representation_df = change_representation_df_original.copy()
+    change_representation_df = self.change_representation_df.copy()
 
     # 
     detection_strategy_result_dict = {}

@@ -7,6 +7,7 @@ Created on Sun Mar 20 17:00:46 2022
 
 import pandas as pd
 import numpy as np
+import datetime
 
 def get_feature_probability(TM_df_original, control_flow_feature):
 
@@ -48,7 +49,7 @@ def get_feature_causality(TM_df_original, control_flow_feature):
     TM_df = pd.merge(TM_df, TM_df_inverted, on=['activity_from', 'activity_to'], how='left')
 
     # Causality: x→y if x>y and not y>x
-    TM_df[control_flow_feature] = np.where((TM_df['direct_succession']==1) & (TM_df['opposite_direction']==0), 1, 0)
+    TM_df[control_flow_feature] = np.where((TM_df['direct_succession']==1) & (TM_df['opposite_direction']!=1), 1, 0)
 
     return TM_df[[control_flow_feature]]
 
@@ -96,12 +97,12 @@ def get_feature_choice(TM_df_original, control_flow_feature):
     TM_df = pd.merge(TM_df, TM_df_inverted, on=['activity_from', 'activity_to'], how='left')
     
     # Choice: x#y if not x>y and not y>x and not x--->y
-    TM_df[control_flow_feature] = np.where((TM_df['direct_succession']==0) & (TM_df['opposite_direction']==0), 1, 0)
+    TM_df[control_flow_feature] = np.where((TM_df['direct_succession']!=1) & (TM_df['opposite_direction']!=1), 1, 0)
 
     return TM_df[[control_flow_feature]]
 
 
-def get_feature_average_time(TM_df_original, log_transition_original, time_feature, time_feature_original):
+def get_feature_avg_time(TM_df_original, log_transition_original, time_feature, time_feature_original):
 
     """...
     Args:
@@ -112,7 +113,7 @@ def get_feature_average_time(TM_df_original, log_transition_original, time_featu
     TM_df = TM_df_original.copy()
     log_transition = log_transition_original.copy()
 
-    log_transition[time_feature] = (pd.to_datetime(log_transition[time_feature_original + '_to'], errors='coerce') - pd.to_datetime(log_transition[time_feature_original + '_from'], errors='coerce')).dt.total_seconds() / 60
+    log_transition[time_feature] = (log_transition[time_feature_original + '_to'] - log_transition[time_feature_original + '_from']).dt.total_seconds() / 60
 
     TM_df_time_feature = log_transition.groupby(['activity_from','activity_to'])[time_feature].mean()
 
@@ -134,7 +135,7 @@ def get_feature_time_std(TM_df_original, log_transition_original, time_feature, 
     TM_df = TM_df_original.copy()
     log_transition = log_transition_original.copy()
 
-    log_transition[time_feature] = (pd.to_datetime(log_transition[time_feature_original + '_to'], errors='coerce') - pd.to_datetime(log_transition[time_feature_original + '_from'], errors='coerce')).dt.total_seconds() / 60
+    log_transition[time_feature] = (log_transition[time_feature_original + '_to'] - log_transition[time_feature_original + '_from']).dt.total_seconds() / 60
     
     TM_df_time_feature = log_transition.groupby(['activity_from','activity_to'])[time_feature].std()
 
