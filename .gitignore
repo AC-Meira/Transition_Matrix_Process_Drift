@@ -1,5 +1,7 @@
 # Local
 Input/
+Experiments/Results/*_files
+old/
 
 __pycache__/
 *.py[cod]

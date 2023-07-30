@@ -75,7 +75,7 @@ def get_delta_matrix_strategy(process_representation_reference_window_df_origina
                                                                                                                                     , process_representation_detection_window_df
                                                                                                                                     , change_feature_params)
 
-        except AttributeError as e:
+        except Exception as e:
             print("Unknown change feature: ", change_feature)
             print("Error: ", e)
 
@@ -195,7 +195,7 @@ def get_statistic_test_strategy(process_representation_reference_window_df_origi
                                                                                                                                     , process_representation_detection_window_df
                                                                                                                                     , change_feature_params)
 
-        except AttributeError as e:
+        except Exception as e:
             print("Unknown change feature: ", change_feature)
             print("Error: ", e)
 

@@ -101,30 +101,35 @@ class TMPD():
         #                   .assign(transition_id=lambda df: df.index, case_order=lambda df: df.groupby('case_id').cumcount()))
 
         # self.transition_log = transition_log
+
+        try:
         
-        # Copy the event log to avoid modifying it
-        event_log = self.event_log.copy()
+            # Copy the event log to avoid modifying it
+            event_log = self.event_log.copy()
 
-        # Select the columns needed for the transition log and rename them
-        event_log = event_log[[self.case_id, self.activity_key, self.timestamp_key] + self.other_columns_keys]
-        event_log = event_log.rename(columns={self.case_id:'case_id', self.activity_key:'activity', self.timestamp_key:'timestamp'})
+            # Select the columns needed for the transition log and rename them
+            event_log = event_log[[self.case_id, self.activity_key, self.timestamp_key] + self.other_columns_keys]
+            event_log = event_log.rename(columns={self.case_id:'case_id', self.activity_key:'activity', self.timestamp_key:'timestamp'})
 
-        # Convert timestamp column to datetime format
-        if self.timestamp_format == 'infer':
-            event_log['timestamp'] = pd.to_datetime(event_log['timestamp'], infer_datetime_format=True)
-        elif self.timestamp_format is not None:
-            event_log['timestamp'] = pd.to_datetime(event_log['timestamp'], format=self.timestamp_format)
+            # Convert timestamp column to datetime format
+            if self.timestamp_format == 'infer':
+                event_log['timestamp'] = pd.to_datetime(event_log['timestamp'], infer_datetime_format=True)
+            elif self.timestamp_format is not None:
+                event_log['timestamp'] = pd.to_datetime(event_log['timestamp'], format=self.timestamp_format)
 
 
-        # Create the transition log
-        transition_log = pd.concat([event_log[['case_id']], event_log.add_suffix('_from'), event_log.groupby('case_id').shift(-1).add_suffix('_to')], axis=1).drop(columns=['case_id_from'])
-        transition_log = transition_log.dropna(subset = ['activity_to'])
-        transition_log = transition_log.reset_index(names='original_index') 
-        transition_log["transition_id"] = transition_log.index
-        transition_log['case_order'] = transition_log.groupby('case_id').cumcount()
+            # Create the transition log
+            transition_log = pd.concat([event_log[['case_id']], event_log.add_suffix('_from'), event_log.groupby('case_id').shift(-1).add_suffix('_to')], axis=1).drop(columns=['case_id_from'])
+            transition_log = transition_log.dropna(subset = ['activity_to'])
+            transition_log = transition_log.reset_index(names='original_index') 
+            transition_log["transition_id"] = transition_log.index
+            transition_log['case_order'] = transition_log.groupby('case_id').cumcount()
 
-        # Store the transition log in the object
-        self.transition_log = transition_log
+            # Store the transition log in the object
+            self.transition_log = transition_log
+
+        except Exception as e:
+                print("Error in run_transition_log: ", e)
 
 
     def get_transition_log(self) -> pd.DataFrame:
@@ -149,23 +154,23 @@ class TMPD():
         return self.transition_log
 
         
-    def set_windowing_strategy(self, window_size_mode: str = "Fixed", window_size: int = None,
-                           window_size_max: int = None, window_size_min: int = None,
-                           window_ref_mode: str = "Fixed", overlap: bool = True, sliding_step: int = None,
-                           continuous: bool = True, gap_size: int = None) -> None:
+    def set_windowing_strategy(self, window_size_mode: str = "Fixed", window_size: int = 100,
+                           window_size_max: int = 150, window_size_min: int = 50,
+                           window_ref_mode: str = "Fixed", overlap: bool = True, sliding_step: int = 50,
+                           continuous: bool = True, gap_size: int = 0) -> None:
         """
         Set the windowing strategy to be used in the subsequent analysis.
 
         Args:
         - window_size_mode (str): The mode to be used for determining the window size. Defaults to "Fixed".
-        - window_size (int): The fixed window size to be used. Ignored if window_size_mode is not "Fixed". Defaults to None.
-        - window_size_max (int): The maximum window size to be used. Ignored if window_size_mode is not "Adaptive". Defaults to None.
-        - window_size_min (int): The minimum window size to be used. Ignored if window_size_mode is not "Adaptive". Defaults to None.
-        - window_ref_mode (str): The mode to be used for determining the reference point for the window. Defaults to "Fixed".
+        - window_size (int): The fixed window size to be used. Ignored if window_size_mode is not "Fixed". Defaults to 100.
+        - window_size_max (int): The maximum window size to be used. Ignored if window_size_mode is not "Adaptive". Defaults to 150.
+        - window_size_min (int): The minimum window size to be used. Ignored if window_size_mode is not "Adaptive". Defaults to 50.
+        - window_ref_mode (str): The mode to be used for determining the reference window. "Fixed" reference window will be the first window. Defaults to "Fixed".
         - overlap (bool): Whether or not to allow overlapping windows. Defaults to True.
-        - sliding_step (int): The sliding step size to be used. Ignored if overlap is False. Defaults to None.
+        - sliding_step (int): The sliding step size to be used. Ignored if overlap is False. Defaults to 50.
         - continuous (bool): Whether or not to allow continuous windows. Defaults to True.
-        - gap_size (int): The maximum allowed gap size between events within a window. Defaults to None.
+        - gap_size (int): The maximum allowed gap size between events within a window. Ignored if continuous is True. Defaults to 0.
 
         Returns:
             None
@@ -203,17 +208,52 @@ class TMPD():
             None
         """
 
+        # # Create a new empty dataframe to hold the windows information
+        # windows_df = pd.DataFrame()
+
+        # # Check the windowing mode and generate the window start and end indexes
+        # if self.window_size_mode == 'Fixed':
+        #     # If the window size is fixed, calculate the start and end indexes for each window
+        #     start_idx = range(0, len(self.transition_log), self.sliding_step) if self.overlap else range(0, len(self.transition_log), self.window_size + self.gap_size)
+        #     windows_df['start'] = start_idx
+        #     windows_df['end'] = windows_df['start'] + self.window_size
+        #     # Discard any incomplete windows that go beyond the end of the log
+        #     windows_df = windows_df[windows_df['end'] <= len(self.transition_log)]
+        # else:
+        #     # TODO: Handle other windowing modes
+        #     raise NotImplementedError("Windowing mode not implemented yet")
+
+        # # Add a unique window index to each window
+        # windows_df['window_index'] = windows_df.index
+
+        # # Convert the windows dataframe to a dictionary and store it in the object
+        # self.windows_index_dict = windows_df.to_dict('index')
+
+
         # Create a new empty dataframe to hold the windows information
         windows_df = pd.DataFrame()
 
-        # Check the windowing mode and generate the window start and end indexes
+        # Get the windows index based on the configured windowing strategy
         if self.window_size_mode == 'Fixed':
-            # If the window size is fixed, calculate the start and end indexes for each window
-            start_idx = range(0, len(self.transition_log), self.sliding_step) if self.overlap else range(0, len(self.transition_log), self.window_size + self.gap_size)
-            windows_df['start'] = start_idx
+
+            # If there is no overlap between windows
+            if self.overlap == False:
+                # If the window is continuous
+                if self.continuous == True:
+                    windows_df['start'] = range(0, len(self.transition_log), self.window_size)
+                # If the window is not continuous, a gap size is added between each window
+                else:
+                    windows_df['start'] = range(0, len(self.transition_log), self.window_size + self.gap_size)
+            # If there is overlap between windows, a sliding step is used to move the window
+            else:
+                windows_df['start'] = range(0, len(self.transition_log), self.sliding_step)
+
+            # Calculate the end index of each window
             windows_df['end'] = windows_df['start'] + self.window_size
-            # Discard any incomplete windows that go beyond the end of the log
+
+            # Remove windows that are incomplete
             windows_df = windows_df[windows_df['end'] <= len(self.transition_log)]
+
         else:
             # TODO: Handle other windowing modes
             raise NotImplementedError("Windowing mode not implemented yet")
@@ -222,38 +262,7 @@ class TMPD():
         windows_df['window_index'] = windows_df.index
 
         # Convert the windows dataframe to a dictionary and store it in the object
-        self.windows_index_dict = windows_df.to_dict('index')
-
-        # # Get the windows index based on the configured windowing strategy
-        # if self.window_size_mode == 'Fixed':
-
-        #     # If there's no overlap between windows
-        #     if self.overlap == False:
-
-        #         # If the window is continuous
-        #         if self.continuous == True:
-        #             windows_index['start'] = range(0, len(self.transition_log), self.window_size)
-        #         # If the window is not continuous, a gap size is added between each window
-        #         else:
-        #             windows_index['start'] = range(0, len(self.transition_log), self.window_size + self.gap_size)
-        #     # If there's overlap between windows, a sliding step is used to move the window
-        #     else:
-        #         windows_index['start'] = range(0, len(self.transition_log), self.sliding_step)
-
-        #     # Calculate the end index of each window
-        #     windows_index['end'] = windows_index['start'] + self.window_size
-
-        #     # Remove windows that are incomplete
-        #     windows_index = windows_index[windows_index['end'] <= len(self.transition_log)]
-
-        # # else:
-        # #     # TODO
-
-        # # Add window index number to the dataframe
-        # windows_index['window_index'] = windows_index.index
-
-        # # Store the windows index in the object as a dictionary
-        # self.windows_index_dict = windows_index.to_dict('index') 
+        self.windows_df_dict = windows_df.to_dict('index') 
 
 
     def get_windowing_strategy(self) -> dict:
@@ -267,7 +276,7 @@ class TMPD():
             dict: A dictionary containing the window index, start and end indices of each window.
         """
 
-        return self.windows_index_dict
+        return self.windows_df_dict
         # return 'window_size_mode: ' + self.window_size_mode + ', window_size: ' + str(self.window_size) + ', window_size_max: ' + str(self.window_size_max) + \
         #     ', window_size_min: ' + str(self.window_size_min) + ', window_ref_mode: ' + self.window_ref_mode + ', overlap: ' + self.overlap + ', sliding_step: ' + \
         #         str(self.sliding_step) + ', continuous: ' + self.continuous + ', gap_size: ' + str(self.gap_size)
@@ -347,32 +356,32 @@ class TMPD():
         for control_flow_feature in self.control_flow_features - {'frequency', 'percentual'}:
             try:
                 process_features_dict[control_flow_feature] = getattr(TMPD_process_features, "get_feature_" + control_flow_feature)(process_representation_df, control_flow_feature)
-            except AttributeError as e:
-                print("Unknown feature: ", control_flow_feature)
+            except Exception as e:
+                print("Error in control_flow_feature representation: ", control_flow_feature)
                 print("Error: ", e)
 
         # Add time features
         for time_feature in self.time_features:
             try:
                 process_features_dict[time_feature] = getattr(TMPD_process_features, "get_feature_" + time_feature)(process_representation_df, transition_log, time_feature, self.time_features[time_feature])
-            except AttributeError as e:
-                print("Unknown feature: ", time_feature)
+            except Exception as e:
+                print("Error in time_feature representation: ", time_feature)
                 print("Error: ", e)
 
         # Add resource features
         for resource_feature in self.resource_features:
             try:
                 process_features_dict[resource_feature] = getattr(TMPD_process_features, "get_feature_" + resource_feature)(process_representation_df, transition_log, resource_feature, self.resource_features[resource_feature])
-            except AttributeError as e:
-                print("Unknown feature: ", resource_feature)
+            except Exception as e:
+                print("Error in resource_feature representation: ", resource_feature)
                 print("Error: ", e)
 
         # Add data features
         for data_feature in self.data_features:
             try:
                 process_features_dict[data_feature] = getattr(TMPD_process_features, "get_feature_" + data_feature)(process_representation_df, transition_log, data_feature, self.data_features[data_feature])
-            except AttributeError as e:
-                print("Unknown feature: ", data_feature)
+            except Exception as e:
+                print("Error in data_feature representation: ", data_feature)
                 print("Error: ", e)
 
         # Merge all features transition matrices
@@ -478,10 +487,10 @@ class TMPD():
         """
 
         # Initiating the change representation dictionary
-        change_representation_dict = self.windows_index_dict.copy()
+        change_representation_dict = self.windows_df_dict.copy()
 
         # Iterate over each window index and window information
-        for window_index, window_info in self.windows_index_dict.items():
+        for window_index, window_info in self.windows_df_dict.items():
 
             # Run process representation with the current detection window
             self.run_process_representation(self.transition_log.iloc[window_info['start'] : window_info['end']])
@@ -504,8 +513,8 @@ class TMPD():
                                 , change_feature_params_dict
                             )
                         )
-                    except AttributeError as e:
-                        print("Error in change feature strategy: ", change_feature_strategy)   
+                    except Exception as e:
+                        print("Error in run_change_representation: ", change_feature_strategy)   
                         print("Error: ", e)
                 
                 # If the window reference mode is Sliding, the current detection window becomes the reference window, otherwise the reference window remains the first window. 
@@ -634,8 +643,8 @@ class TMPD():
                 detection_task_result_dict[detection_task_strategy] = getattr(
                     TMPD_detection_tasks, "get_" + detection_task_strategy)(self, detection_task_params_dict)
 
-            except AttributeError as e:
-                print("Error in detection task strategy: ", detection_task_strategy)  
+            except Exception as e:
+                print("Error in run_detection_task: ", detection_task_strategy)  
                 print("Error: ", e)
 
         # Prepare result dict to dataframe

@@ -19,9 +19,9 @@ def dingOptimalNumberOfPoints(algo):
         'frequency_gtest' : {'process_feature':'frequency', 'method':'g_test', 'contingency_matrix_sum_value' : '5', 'remove_zeros':'True'}
         , 'frequency_cramersv' : {'process_feature':'frequency', 'method':'cramers_v', 'contingency_matrix_sum_value' : '5', 'remove_zeros':'True'}
     """
-
-    point_detection_penalty = 50
+    point_detection_penalty = 15
     x_lines = algo.predict(pen=point_detection_penalty)
+    
 
     while point_detection_penalty >= len(x_lines):
         point_detection_penalty -= 1
@@ -31,6 +31,7 @@ def dingOptimalNumberOfPoints(algo):
         x_lines = x_lines[-1:]
 
     return x_lines
+
 
 def get_cpd_pelt(self, change_representation_df, detection_feature_params):
 
@@ -53,22 +54,32 @@ def get_cpd_pelt(self, change_representation_df, detection_feature_params):
     try: min_size = detection_feature_params['min_size']
     except: 
         if self.overlap == True:
-            min_size = str(int(self.window_size/self.sliding_step))
+            min_size = str(int(self.window_size/self.sliding_step)+1)
         else: 
              min_size = '1'
   
     try: jump = detection_feature_params['jump']
     except: jump = '1'
 
-    # Call pelt algorithm
+    # fit pelt algorithm
     pelt_algo = rpt.Pelt(model = model
         , min_size = int(min_size)
         , jump = int(jump)
         , custom_cost = cost
     ).fit(signals)
 
-    # 
-    result = dingOptimalNumberOfPoints(pelt_algo)
+    # predict pelt algorithm 
+    try: 
+        pen = detection_feature_params['pen']
+        try: result = pelt_algo.predict(pen=pen)
+        except Exception as e:
+            print("Error in get_cpd_pelt: ", e)
+            result = []
+    except: 
+        try: result = dingOptimalNumberOfPoints(pelt_algo)
+        except Exception as e:
+            print("Error in get_cpd_pelt: ", e)
+            result = []
 
     # Smooth correction
     result = [item + int(detection_feature_params['smooth']) for item in result]
@@ -104,8 +115,8 @@ def get_time_series_strategy(self, detection_task_params_dict):
         try:
             detection_strategy_result_dict[detection_feature] = getattr(thismodule, "get_" + detection_feature_params['method'])(self, change_representation_df, detection_feature_params)
 
-        except AttributeError as e:
-            print("Unknown detection feature: ", detection_feature)
+        except Exception as e:
+            print("Error in get_time_series_strategy: ", detection_feature)
             print("Error: ", e)
 
     return detection_strategy_result_dict 
@@ -169,8 +180,8 @@ def get_threshold_strategy(self, detection_task_params_dict):
         try:
             detection_strategy_result_dict[detection_feature] = getattr(thismodule, "get_" + detection_feature_params['method'])(change_representation_df, detection_feature_params)
 
-        except AttributeError as e:
-            print("Unknown detection feature: ", detection_feature)
+        except Exception as e:
+            print("Error in get_threshold_strategy: ", detection_feature)
             print("Error: ", e)
 
     return detection_strategy_result_dict 
