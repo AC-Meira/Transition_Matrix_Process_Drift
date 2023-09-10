@@ -2,9 +2,7 @@
 Input/
 Experiments/Results/*_files
 old/
-.vscode/*
 .vscode
-.vscode/
 
 __pycache__/
 *.py[cod]
