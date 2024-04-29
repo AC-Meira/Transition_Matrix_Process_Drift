@@ -4,7 +4,10 @@ Input/
 Experiments/Results/*_files
 old/
 .vscode
-.xlsx
+*.xlsx
+*.csv
+*.jar
+*.docx
 
 __pycache__/
 *.py[cod]

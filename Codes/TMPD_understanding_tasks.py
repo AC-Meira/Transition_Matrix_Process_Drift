@@ -7,6 +7,7 @@ Created on Sun Mar 04 17:00:46 2024
 
 import os
 import yaml
+import ast
 import sys
 thismodule = sys.modules[__name__]
 import numpy as np
@@ -78,7 +79,7 @@ def perform_count_test(merged_windows, row, variable_ref, variable_det):
 
 
 # Adjusted function with pseudo-count (also known as Laplace smoothing) for handling zero frequencies
-def perform_proportions_test(merged_windows, row, transition, variable_ref, variable_det, pseudo_count=0.5):
+def perform_proportions_test(merged_windows, row, transition, variable_ref, variable_det, pseudo_count):
     prob_reference = row[variable_ref]
     prob_detection = row[variable_det]
 
@@ -89,21 +90,36 @@ def perform_proportions_test(merged_windows, row, transition, variable_ref, vari
     total_count_reference = merged_windows.loc[merged_windows['activity_from'] == transition[0], 'frequency_ref'].sum()
     total_count_detection = merged_windows.loc[merged_windows['activity_from'] == transition[0], 'frequency_det'].sum()
 
-    # Add pseudo-count
-    success_reference = int(round(prob_reference * (total_count_reference + pseudo_count)))
-    success_detection = int(round(prob_detection * (total_count_detection + pseudo_count)))
+    # Adjust counts by adding pseudo-counts directly to the successes and total counts
+    # This approach ensures that zero frequencies are adjusted to allow for statistical testing
+    success_reference = prob_reference * total_count_reference + pseudo_count
+    success_detection = prob_detection * total_count_detection + pseudo_count
+    total_count_reference += pseudo_count
+    total_count_detection += pseudo_count
 
-    # Calculate standard deviation
-    std = np.sqrt((prob_reference * (1 - prob_reference) / (total_count_reference + pseudo_count)) +
-                  (prob_detection * (1 - prob_detection) / (total_count_detection + pseudo_count)))
+    # Calculate the successes and attempts for both groups, adjusting for pseudo-counts
+    nobs = [total_count_reference, total_count_detection]
+    count = [success_reference, success_detection]
 
-    # Avoid divide by zero
-    if std == 0:
-        return 1
+    # Perform the proportions Z-test
+    stat, p_value = proportions_ztest(count, nobs)
 
-    # Perform the test
-    stat, p_value = proportions_ztest([success_reference, success_detection], 
-                                      [total_count_reference + pseudo_count, total_count_detection + pseudo_count])
+    # # Add pseudo-count
+    # success_reference = int(round(prob_reference * (total_count_reference + pseudo_count)))
+    # success_detection = int(round(prob_detection * (total_count_detection + pseudo_count)))
+
+    # # Calculate standard deviation
+    # std = np.sqrt((prob_reference * (1 - prob_reference) / (total_count_reference + pseudo_count)) +
+    #               (prob_detection * (1 - prob_detection) / (total_count_detection + pseudo_count)))
+
+    # # Avoid divide by zero
+    # if std == 0:
+    #     return 1
+
+    # # Perform the test
+    # stat, p_value = proportions_ztest([success_reference, success_detection], 
+    #                                   [total_count_reference + pseudo_count, total_count_detection + pseudo_count])
+    
     return p_value
 
 
@@ -236,7 +252,7 @@ def compare_dfgs(dfg1, dfg2):
 
 
 def create_bpmn_from_dfg(dfg):
-    return pm4py.discover_bpmn_inductive(dfg)
+    return pm4py.discover_bpmn_inductive(dfg, noise_threshold=0)
 
 
 
@@ -406,14 +422,14 @@ def llm_instructions(llm_instructions_path, reference_bpmn_text, detection_bpmn_
         llm_instructions = yaml.safe_load(file)
 
     llm_instructions["changes_informations"] += (
-        " - Transitions with statistically significant alterations in probability: {0}. \n"
-        " - Transitions with statistically significant alterations in frequence: {1}. \n"
+        " - Transitions with variations in probability: {0}. \n"
+        " - Transitions with variations in in frequence: {1}. \n"
         " - New transitions added to the process: {2}. \n"
         " - Deleted transitions from the process: {3}. \n"
         " - New activities added to the process: {4}. \n"
         " - Deleted activities from the process: {5}. \n"
     ).format(change_informations["Changed_transition_probability"], change_informations["Changed_transition_frequency"], change_informations["Transitions_new"], change_informations["Transitions_Deleted"]
-                     , change_informations["Activities_new"], change_informations["Activities_Deleted"] )
+            , change_informations["Activities_new"], change_informations["Activities_Deleted"] )
     
     llm_instructions["bpmn_informations"] += (
         " - The BPMN before the concept drift: {0}. \n"
@@ -429,6 +445,85 @@ def llm_instructions(llm_instructions_path, reference_bpmn_text, detection_bpmn_
                             
     return llm_instructions
      
+
+def llm_prompt_analysis(llm_instructions):
+
+    prompt = (llm_instructions["introduction"] 
+                   + llm_instructions["changes_informations"] 
+                   + llm_instructions["bpmn_informations"] 
+                   + llm_instructions["concept_drift_analysis"])
+    return prompt
+
+
+def llm_prompt_classification(llm_instructions, change_informations):
+
+    prompt = (llm_instructions["introduction"] 
+        + llm_instructions["bpmn_informations"] 
+        + llm_instructions["changes_informations"] 
+        + "\n### Control Flow Change Patterns ### \n"
+    )
+
+    # prompt = ("\n### Concept drift analysis of the BPMN diagrams and the detailed variations in activities and transitions ###\n" + characterization_analysis)
+
+    # If there is at least a new or deleted activity, then suggest SRE, PRE, CRE, or RP
+    if change_informations['Activities_new'] != ['None'] or change_informations['Activities_Deleted'] != ['None']:
+        prompt += (llm_instructions['controlflow_change_patterns']['sre_instructions'] 
+                  + llm_instructions['controlflow_change_patterns']['pre_instructions'] 
+                  + llm_instructions['controlflow_change_patterns']['cre_instructions'] 
+                  + llm_instructions['controlflow_change_patterns']['rp_instructions'] 
+        )
+
+    # If the changes don't involve addition or deletion of activities but rather addition or deletion of transitions between existing activities, then suggest SM, CM, PM, or SW, CF, PL, LP,CD,  CB, or CP
+    elif change_informations['Transitions_new'] != ['None'] or change_informations['Transitions_Deleted'] != ['None']:
+        # Movement Patterns
+        prompt += (llm_instructions['controlflow_change_patterns']['sm_instructions'] 
+                + llm_instructions['controlflow_change_patterns']['cm_instructions'] 
+                + llm_instructions['controlflow_change_patterns']['pm_instructions'] 
+                + llm_instructions['controlflow_change_patterns']['sw_instructions'] 
+        )
+
+        # Gateway Type Changes
+        prompt += (llm_instructions['controlflow_change_patterns']['pl_instructions'] 
+                + llm_instructions['controlflow_change_patterns']['cf_instructions'] 
+        )
+
+        # Synchronization (Parallel involved)
+        prompt += (llm_instructions['controlflow_change_patterns']['cd_instructions'] 
+        )
+
+        # Bypass (XOR involved)
+        prompt += (llm_instructions['controlflow_change_patterns']['cb_instructions'] 
+        )
+
+        # Loop Fragment Changes
+        prompt += (llm_instructions['controlflow_change_patterns']['cp_instructions'] 
+                + llm_instructions['controlflow_change_patterns']['lp_instructions'] 
+        )
+
+    # If the changes don't involve addition or deletion of activities nor addition or deletion of transitions between existing activities, but rather only changes in the transitions, then is FR
+    else:
+        prompt += (
+            llm_instructions['controlflow_change_patterns']['fr_instructions'] 
+        )
+
+    prompt += llm_instructions["change_pattern_classification"]
+
+    return prompt
+
+
+
+def llm_classification_formatting(characterization_classification):
+
+    # Finding the start and end of the dictionary string
+    try:
+        start_str = "result_dict = {"
+        end_str = "}"
+        start_index = characterization_classification.find(start_str) + len(start_str) - 1
+        end_index = characterization_classification.find(end_str, start_index) + 1
+
+        return ast.literal_eval(characterization_classification[start_index:end_index].strip())
+    except:
+        return "Classification not in the expected format."
 
 
 

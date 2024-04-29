@@ -94,8 +94,11 @@ def add_start_end_activities(event_log, case_id_col, activity_col, timestamp_col
     :param timestamp_col: String name of the column containing the timestamps
     :return: DataFrame with modified event log
     """
+    # Create a new variable that will be the case_id numerical for sort
+    event_log['case_id_numerical'] = pd.factorize(event_log[case_id_col])[0]
+
     # Sort by CaseId and Timestamp to ensure the order
-    event_log.sort_values(by=[case_id_col, timestamp_col], inplace=True)
+    event_log.sort_values(by=['case_id_numerical', timestamp_col], inplace=True)
 
     # Add a SortOrder column with default value 1
     event_log['SortOrder'] = 1
@@ -126,9 +129,27 @@ def add_start_end_activities(event_log, case_id_col, activity_col, timestamp_col
     event_log = pd.concat([event_log, pd.DataFrame(start_rows + end_rows)], ignore_index=True)
 
     # Sort by CaseId, Timestamp, and SortOrder
-    event_log.sort_values(by=[case_id_col, timestamp_col, 'SortOrder'], inplace=True)
+    event_log.sort_values(by=['case_id_numerical', timestamp_col, 'SortOrder'], inplace=True)
 
-    # # Remove the SortOrder column as it's no longer needed
-    # event_log.drop('SortOrder', axis=1, inplace=True)
+    # Remove the SortOrder column as it's no longer needed
+    event_log.drop(['case_id_numerical', 'SortOrder'], axis=1, inplace=True)
 
     return event_log
+
+def list_match_metrics(gt_list, pred_list):
+
+    # Convert lists to sets and lowercase
+    gt_set = set(item.lower() for item in gt_list)
+    pred_set = set(item.lower() for item in pred_list)
+    
+    # Proceed with set operations
+    true_positives = len(gt_set.intersection(pred_set))
+    false_positives = len(pred_set - gt_set)
+    false_negatives = len(gt_set - pred_set)
+
+    # Calculate metrics
+    precision = true_positives / (true_positives + false_positives) if true_positives + false_positives > 0 else 0
+    recall = true_positives / (true_positives + false_negatives) if true_positives + false_negatives > 0 else 0
+    f1 = 2 * (precision * recall) / (precision + recall) if precision + recall > 0 else 0
+    
+    return precision, recall, f1

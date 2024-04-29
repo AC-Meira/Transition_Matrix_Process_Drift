@@ -18,7 +18,7 @@ controlflow_change_patterns:
     - sre_instructions: >
         The 'SRE' (Serial Routing Enablement) involves the addition or deletion of one or more activities in or from a sequential flow. 
         For example, the sequence could change from '->(A, B)' to '->(A, C, B)' or vice versa, where 'A', 'B', and 'C' are activities, and '->' symbolizes sequential flow. 
-        This scenario implies that after the drift, activity 'A' is inserted in the process and in a sequential flow between other two activities, 
+        This scenario implies that after the drift, activity 'C' is inserted in the process and in a sequential flow between other two activities, 
         in this case 'A' and 'B', or it could be deleted from the process and from a sequential flow between two other activities. 
         Tip: In such scenarios, it's advisable to delve deeper and investigates if the BPMN information shows differences in Sequences (->) fragments. 
         This scenario involve the addition and deletion of activities and transitions, so look if activities and transitions are inserted and deleted.
