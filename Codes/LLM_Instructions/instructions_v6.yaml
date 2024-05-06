@@ -8,22 +8,40 @@ introduction: |
     
 
 changes_informations: |
-    ### List of variations in activities and transitions ### 
-    You are provided with detailed data showcasing modifications in the business process across two intervals:
+    ### Introduction ###
+    You are an technical analyst specialized in concept drift in process mining. 
+    Your pivotal role involves a deep dive into the concept drift phenomena within a business process.
+    This comprehensive analysis entails a side-by-side comparison of two distinct time frames representing the process before (reference window) and after the change (detection window).
+
+    ### Analysis ###
+    You are provided with detailed data showcasing all the activities and transitions between activities in both time frame (reference and detection windows),
+    as well as the alterations identified in a simple comparison.
+
+    Based on the detailed data, explain all changes using a holistic analysis, specially regarding:
+        - Changes in the control-flow such as sequences, parallels, and conditionals.
+        - Changes in activities movements in the flow.
+        - Changes in loops and silent transitions (both are not explicity represented in this list, you have to understand the flow of this process).
+        - Changes that make any activity become skippable or non-skippable (activities in a conditional flow with at least another activity is not consider skippable).
+        
     
 
 bpmn_informations: |
-    ### BPMN diagrams Comparison ###
+    ### Introduction ###
+    You are an technical analyst specialized in concept drift in process mining. 
+    Your pivotal role involves a deep dive into the concept drift phenomena within a business process.
+    This comprehensive analysis entails a side-by-side comparison of two distinct time frames representing the process before (reference window) and after the change (detection window).
+
+    ### BPMN diagrams instructions ###
     A critical component of your analysis involves a thorough comparison of BPMN diagrams before and after the detection of concept drift, necessitating a solid grasp of BPMN symbols. 
     Such understanding is crucial for identifying structural changes within the diagrams, including modifications in sequences, parallelisms, conditional flows, loops, and silent transitions.
     Understand BPMN Symbols: 
-    Sequential fragments are denoted by '->'.
-         - Parallel fragments by '+'.
-         - Conditional fragments by 'X'.
-         - Looping fragments by '*'.
-         - Silent transitions are indicated by 'tau'.
-         - Nested fragments are enclosed in parentheses '()'.
-         - Items within a fragment are separated by commas.
+        - Sequential fragments are denoted by '->'.
+        - Parallel fragments by '+'.
+        - Conditional fragments by 'X'.
+        - Looping fragments by '*'.
+        - Silent transitions are indicated by 'tau'.
+        - Nested fragments are enclosed in parentheses '()'.
+        - Items within a fragment are separated by commas.
     For example: In the BPMN diagram notation ->(A, X(B, ->(C, D)), E), the structure is as follows:
         - The outermost fragment is a sequential fragment ('->'), indicating that its components follow one after another.
         - Within this sequential fragment, there are three main items:
@@ -33,19 +51,30 @@ bpmn_informations: |
                 - A nested sequential fragment ('->'), containing activities C and D.
             - E - another activity that is part of the outer sequential fragment, following the conditional fragment.
 
+    ### Analysis ###
+    You are provided with detailed BPMN diagrams for both time frame (reference and detection windows). Compare the BPMN diagrams identifying and highlighting if there are any differences regarding:
+        - Changes in the control-flow such as sequences, parallels, and conditionals.
+        - Changes in activities movements in the flow.
+        - Changes in loops and silent transitions ('tau').
+        - Changes that make any activity become skippable or non-skippable (activities in a conditional flow with at least another activity is not consider skippable).  
+
+
 
 change_pattern_classification: |
-    ### Change pattern classification ###
-    First step: Compare the BPMN diagrams identifying and highlighting if there are any differences regarding:
-     - Changes in fragments such as sequences, parallels, and conditionals.
-     - Changes in activities positions (movements).
-     - Changes in loops and silent transitions ('tau').
-     - Changes in the activity relationships. 
-    Second step: Analyze the list of variations in activities and transitions regarding:
-     - New and deleted transitions normally represents drastic changes in the control flow, understand what changed for each new and deleted transition.
-     - Changes that make any activity become skippable or non-skippable.
-    Third step: Combine all information you have so far and make a holistic understanding of what happened as a whole.
-    Fourth step: Conclude whether a concept drift occurred and identify the most significant or impactful change pattern that has occurred. Focus on this primary change pattern for your analysis. Also, identify which activities are involved.  
+    ### Introduction ###
+    You are an technical analyst specialized in concept drift in process mining. 
+    Your pivotal role involves a deep dive into the concept drift phenomena within a business process.
+    This comprehensive analysis entails a side-by-side comparison of two distinct time frames representing the process before (reference window) and after the change (detection window).
+
+    ### Analysis ###
+    You are provided with detailed analysis regarding alterations in activities and transitions analysis, and the BPMN diagrams comparison analysis.
+    Combine all informations previously analyzed and make a final and conclusive holistic analysis.
+
+    ### Change pattern classification ### 
+    You are provided with a list of pre-defined change patterns.
+    Classify whether a concept drift occurred and identify the most significant change pattern that has occurred and identify which activities are involved. 
+    
+    ### Formating ###
     Format your conclusion as follows, providing a clear and concise verdict on whether the change pattern is present: 
     '### result_dict = {'concept_drift' : ['No'], 'change_pattern' : ['None'], 'activities' : ['None']} 
     or '### result_dict = {'concept_drift' : ['Yes'], 'change_pattern' : ['pattern_acronym'], 'activities' : ['A', 'B']}. 
@@ -181,109 +210,3 @@ controlflow_change_patterns:
         FR (Frequency):
          - If there are transitions with variances without control-flow changes, then is FR pattern. 
 
- 
-# controlflow_change_patterns:
-#     - sre_instructions: >
-#         The 'SRE' (Serial Routing Enablement) involves the addition or deletion of one or more activities in or from a sequential flow. 
-#         For example, the sequence could change from '->(A, B)' to '->(A, C, B)' or vice versa, where 'A', 'B', and 'C' are activities, and '->' symbolizes sequential flow. 
-#         This scenario implies that after the drift, activity 'C' is inserted in the process and in a sequential flow between other two activities, 
-#         in this case 'A' and 'B', or it could be deleted from the process and from a sequential flow between two other activities. 
-#         Tips: This scenario involve the addition and deletion of activities and transitions, so look if activities and transitions are inserted and deleted 
-#         and investigates if the BPMN information shows differences in Sequences (->) fragments.
-#     - pre_instructions: >
-#         The 'PRE' (Parallel Routing Enablement) involves the addition or deletion of one or more activities in or from a parallel branch. 
-#         For example, the sequence could change from '->(A, B, C)' to '->(A, +(B, D), C)' or vice versa, where 'A', 'B', 'C', and 'D' are activities, '->' symbolizes sequential flow, and '+' represents an AND or parallel operation within the BPMN (Business Process Model and Notation). 
-#         This scenario implies that after the drift, activity 'D' is inserted in the process and in a parallel branch, or 'D' could be deleted from the process and from a parallel branch. 
-#         Tip: This scenario involve the addition and deletion of activities and transitions, so look if activities and transitions are inserted and deleted 
-#         and investigates if the BPMN information shows new or deleted ANDs (+) fragments.
-#     - cre_instructions: >
-#         The 'CRE' (Conditional Routing Enablement) involves the addition or deletion of one or more activities in or from a conditional branch. 
-#         For example, the sequence could change from '->(A, B, C)' to '->(A, X(B, D), C)' or vice versa, where 'A', 'B', 'C', and 'D' are activities, '->' symbolizes sequential flow, and 'X' represents a XOR or conditional operation within the BPMN (Business Process Model and Notation). 
-#         This scenario implies that the drift, activity 'D' is inserted in the process and in a conditional branch, or 'D' could be deleted from the process and from a conditional branch. 
-#         Tip: This scenario involve the addition and deletion of activities and transitions, so look if activities and transitions are inserted and deleted
-#         and investigates if the BPMN information shows new or deleted XORs (X) fragments.
-#     - cp_instructions: >
-#         The 'CP' (Copy) involves duplicate an existing activity of the process to another location in the process. 
-#         For example, the sequence could change from '->(A, B, C, D)' to '->(A, B, C, A, D)' or vice versa, where 'A', 'B', 'C', and 'D' are activities, '->' indicates a sequential operation. 
-#         This scenario implies that after the drift, activities 'A' appears in another location in the process as well. 
-#         Note: Identifying this pattern can be challenging, especially because neither the BPMN diagrams nor the transitions information may be correctly identified the duplication of an activity. 
-#         Both informations may only show that the duplicated activity has new transitions or maybe identify the duplication as a loop. 
-#         Tip: In such scenarios, it's advisable to delve deeper and investigates the new transitions. 
-#         Using the previous example, activity 'A' would have a new transition from activity 'C' ('C', 'A') and a new transition to activity 'D' ('A', 'D'). 
-#         These two new transitions should be understood as a new addition between 'C' and 'D', and, consequently, identified the duplication of 'A'.
-#     - rp_instructions: >
-#         The 'RP' (Replace) involves the replace of one or more activities by other new activities. 
-#         For example, the sequence could change from '->(A, B, C)' to '->(A, D, C)', where 'A', 'B', 'C', and 'D' are activities, '->' symbolizes sequential flow. 
-#         This scenario implies that after the drift, activity 'B' is replaced by activity 'D', which are a new activity in the process. 
-#         Tip: This scenario involve the addition and deletion of activities, so look if activities are inserted and another deleted.
-#     - sw_instructions: >
-#         The 'SW' (Swap) involves the swap of two existing activities in the process. 
-#         For example, the sequence could change from '->(A, B, C, D, E, F)' to '->(A, E, C, D, B, F)', where 'A', 'B', 'C', 'D', 'E', and 'F' are activities, '->' symbolizes sequential flow. 
-#         This scenario implies that after the drift, activity 'B' is swapped with activity 'E'. 
-#         Tip: In such scenarios, it's advisable to delve deeper and investigates if the BPMN information may shows the activities in different locations in the process, both occupying the exact position of the other, 
-#         and if both involved activities have new and deleted transitions. This scenario DOESN'T involve activities addition or deletion.
-#     - sm_instructions: >
-#         The 'SM' (Serial Move) involves move an existing activity to between two existing activities. 
-#         For example, the sequence could change from '->(A, B, C, D, E)' to '->(A, C, D, B, E)', where 'A', 'B', 'C', 'D', and 'E' are activities, '->' symbolizes sequential flow. 
-#         This scenario implies that after the drift, activity 'B', which was between activities 'A' and 'C', is moved to between activities 'D' and 'E'. 
-#         Tip: In such scenarios, it's advisable to delve deeper and investigates if the BPMN information may shows the activity in different locations in the process, and if the involved activity have new and deleted transitions. 
-#         This scenario DOESN'T involve activities addition or deletion.
-#     - cm_instructions: >
-#         The 'CM' (Conditional Move) involves move an existing activity into or out of a conditional branch. 
-#         For example, the sequence could change from '->(A, B, C, D, E, F)' to '->(A, C, D, X(B, E), F)', where 'A', 'B', 'C', 'D', 'E', and 'F' are activities, '->' symbolizes sequential flow, 
-#         and 'X' represents a XOR or conditional operation within the BPMN (Business Process Model and Notation). 
-#         This scenario implies that after the drift, activity 'B', which was between activities 'A' and 'C', is moved to between activities 'D' and 'F' and in a conditional branch with activity 'E'. 
-#         Tip: In such scenarios, it's advisable to delve deeper and investigates if the BPMN information may shows the activity in different locations in the process, shows new or deleted XORs (X) fragments, 
-#         and if the involved activity have new and deleted transitions. This scenario DOESN'T involve activities addition or deletion.
-#     - pm_instructions: >
-#         The 'PM' (Parallel Move) involves move an existing activity into or out of a parallel branch. 
-#         For example, the sequence could change from '->(A, B, C, D, E, F)' to '->(A, C, D, +(B, E), F)', where 'A', 'B', 'C', 'D', 'E', and 'F' are activities, '->' symbolizes sequential flow, 
-#         and '+' represents an AND or parallel operation within the BPMN (Business Process Model and Notation). 
-#         This scenario implies that after the drift, activity 'B', which was between activities 'A' and 'C', is moved to between activities 'D' and 'F' and in a parallel branch with activity 'E'. 
-#         Tip: In such scenarios, it's advisable to delve deeper and investigates if the BPMN information may shows the activity in different locations in the process, shows new or deleted ANDs (+) fragments, 
-#         and if the involved activity have new and deleted transitions. This scenario DOESN'T involve activities addition or deletion.
-#     - cf_instructions: >
-#         The 'CF' (Conflict) involves making activities initially mutually exclusive to be sequential, or vice versa. 
-#         For example, the sequence could change from '->(A, X(B, C), D)' to '->(A, B, C, D)' or vice versa, where 'A', 'B', 'C', and 'D' are activities, '->' indicates a sequential operation, 
-#         and 'X' represents a XOR or conditional operation within the BPMN (Business Process Model and Notation). 
-#         This indicates that before the drift, activities 'B' and 'C' were mutually exclusive, suggesting that only one could occur in any process instance, while after the drift, they have become sequential, implying a fixed order of execution. 
-#         Tip: In such scenarios, it's advisable to delve deeper and investigates if the BPMN information shows new or deleted XORs (X) fragments, and if the involved activities have new and deleted transitions. 
-#         This scenario DOESN'T involve activities addition or deletion.
-#     - pl_instructions: >
-#         The 'PL' (Parallel) involves making activities initially parallel to be sequential, or vice versa. 
-#         For example, the sequence could change from '->(A, +(B, C), D)' to '->(A, B, C, D)' or vice versa, where 'A', 'B', 'C', and 'D' are activities, '->' indicates a sequential operation, 
-#         and '+' represents an AND or parallel operation within the BPMN (Business Process Model and Notation). 
-#         This indicates that before the drift, activities 'B' and 'C' were parallel, suggesting that both would occur with no defined order between them, while after the drift, they have become sequential, implying a fixed order of execution. 
-#         Tip: In such scenarios, it's advisable to delve deeper and investigates if the BPMN information shows new or deleted ANDs (+) fragments, and if the involved activity have new and deleted transitions. 
-#         This scenario DOESN'T involve activities addition or deletion.
-#     - cd_instructions: >
-#         The 'CD' (Control Dependency) change pattern indicates a structural reorganization affecting the sequence or dependency among activities in a business process. 
-#         It highlights the transformation of activities from parallel to sequential execution or vice versa, and the reordering of tasks within parallel branches. 
-#         Key indicators include: 
-#         1. Sequentialization or Parallelization - Transitioning activities between parallel and sequential execution, altering their dependencies. 
-#         2. Reordering Within Branches - Modifying the order of activities within parallel branches to establish new execution precedents. 
-#         3. New Control Dependencies - Introducing, removing, or altering transitions that redefine interconnections among activities, aimed at process optimization or adapting to new business requirements. 
-#         In BPMN analysis, look for modifications in activity sequencing and transitions that signal shifts in task dependencies or workflow restructures, aimed at enhancing process efficiency or meeting evolving operational demands.
-#     - lp_instructions: >
-#         The 'LP' (Loop) involves making activities initially loopable to be non-loopable, or vice versa. 
-#         For example, the sequence could change from '->(A, *(B, C, D), E)' to '->(A, B, C, D, E)' or vice versa, where 'A', 'B', 'C', 'D', and 'E' are activities, '->' indicates a sequential operation, 
-#         and '*' represents a loop operation within the BPMN (Business Process Model and Notation). 
-#         This indicates that before the drift, activities 'B', 'C', and 'D' were in a loop, while after the drift, they were not in a loop. 
-#         Tip: In such scenarios, if the BPMN information doesn't show the loop, it's advisable to delve deeper and investigates if deleted transitions led to activities that could lead to the activity in question, which define a loop in the process.
-#     - cb_instructions: >
-#         The 'CB' (Conditional Branching) involves the modifications to the skippability of one or more activities. Specifically, an activity might become optional (skippable) or mandatory (non-skippable). 
-#         For example, the sequence could change from '->(A, B, C)' to '->(A, X(B, null), C)', where 'A', 'B', and 'C' are activities, '->' indicates a sequential operation, 
-#         and 'X' represents a XOR or conditional operation within the BPMN (Business Process Model and Notation).
-#         The term 'null' is used to indicate the absence of an activity in that branch, highlighting the conditional execution of 'B'.
-#         Note: Identifying this pattern can be challenging, especially in BPMN diagrams where the new conditional operations or XOR may not be correctly identified because of the branch with no activitiy, 
-#         making the new skippable nature of 'B' less apparent.
-#         Tip: In such scenarios, investigates all new or deleted transition carefully to understanding if it could represent a change in the skippablability to others activities. 
-#         Using our previous example, the new transition between 'A' to 'C' is causing B to become skippable. This scenario does not involve activities addition or deletion.
-#     - fr_instructions: >
-#         The 'FR' (Frequency) involves change the branching frequency of activities without any changes in the control-flow. 
-#         For example, the sequence could change from '->(A, X(B[550], C[450]), D)' to '->(A, X(B[700], C[300]), D)' or vice versa, where 'A', 'B', 'C', and 'D' are activities, '->' symbolizes sequential flow, 
-#         'X' represents a XOR or conditional operation within the BPMN (Business Process Model and Notation), and the information inside the '[]' represent the activity frequency. 
-#         This indicates that before the drift, activity 'B' and 'C' frequency were similar, while after the drift, they were different. 
-#         In other words, before the drift, the frequency of activities 'B' and 'C' had not statistical difference, and after the drift, theirs frequencies had statistical difference. 
-#         Note: In such scenarios, the involved activities hasn't any control-flow difference before and after the drift, only the branch frequency or branch probability have difference. 
-#         Tip: Investigate activities which are in XORs (X) fragments, and transitions which are in Changed_transition_probability or Changed_transition_frequency but is not in Transitions_new or Transitions_deleted.

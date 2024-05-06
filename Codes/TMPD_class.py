@@ -737,7 +737,7 @@ class TMPD():
                 # Assign ['None'] if there are no transitions for the feature
                 transitions = ['None']
             # Add the transitions to the dictionary with a modified key
-            changed_transitions_dict["Changed_transition_" + str(feature)] = transitions
+            changed_transitions_dict["Transitions with variations in " + str(feature)] = transitions
 
 
         # Combine changed transtions list with DFG changes
@@ -799,106 +799,32 @@ class TMPD():
 
         """
 
-        # ### Analysis prompt
+        ### Transitions changes
+        llm_transition_analysis_prompt = self.llm_instructions["changes_informations"]
+        self.llm_transition_analysis_response = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, llm_transition_analysis_prompt)
+        print("################################ llm_transition_analysis_response #####################################")
+        print(self.llm_transition_analysis_response)
 
-        # # Prepare the prompt
-        # user_prompt_analysis = TMPD_understanding_tasks.llm_prompt_analysis(self.llm_instructions)
-        # print(user_prompt_analysis)
-
-        # # Call LLM response
-        # self.characterization_analysis = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, user_prompt_analysis) 
-        # print(self.characterization_analysis)
-
+        ### BPMN analysis
+        llm_bpmn_analysis_prompt = self.llm_instructions["bpmn_informations"]
+        self.llm_bpmn_analysis_response = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, llm_bpmn_analysis_prompt)
+        print("################################ llm_bpmn_analysis_response #####################################")
+        print(self.llm_bpmn_analysis_response)
 
         ### Classification prompt
-
         # Prepare the prompt
-        self.user_prompt_classification = TMPD_understanding_tasks.llm_prompt_classification(self.llm_instructions, self.change_informations) 
-        print(self.user_prompt_classification)
+        user_prompt_classification = TMPD_understanding_tasks.llm_prompt_classification(self.llm_instructions, self.change_informations, self.llm_transition_analysis_response, self.llm_bpmn_analysis_response) 
+        # print(user_prompt_classification)
 
         # Call LLM response
-        self.characterization_classification = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, self.user_prompt_classification) 
+        self.characterization_classification = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, user_prompt_classification) 
+        print("################################ characterization_classification #####################################")
         print(self.characterization_classification)
 
         # Call LLM classification formatting
         self.characterization_classification_dict = TMPD_understanding_tasks.llm_classification_formatting(self.characterization_classification)
-
-
-
-        # ### Get change patterns List
-        # change_pattern_list = list(self.llm_instructions["controlflow_change_patterns"].keys())
-        
-
-        # if change_patterns_separated:
-        #     self.characterization_response = {}
-        #     self.characterization_classification_response = {}
-
-        #     for change_pattern in change_pattern_list:
-
-        #         user_prompt = (self.llm_instructions["introduction"] + self.llm_instructions["changes_informations"] + self.llm_instructions["bpmn_informations"] 
-        #                        + "### Control Flow Change Patterns ###\n" + self.llm_instructions["controlflow_change_patterns"][change_pattern] + self.llm_instructions["conclusion"])
-
-        #         # Call LLM response
-        #         self.characterization_response[change_pattern] = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, user_prompt) 
-
-        #         # Finding the start and end of the dictionary string
-        #         try:
-        #             start_str = "result_dict = {"
-        #             end_str = "}"
-        #             start_index = self.characterization_response[change_pattern].find(start_str) + len(start_str) - 1
-        #             end_index = self.characterization_response[change_pattern].find(end_str, start_index) + 1
-
-        #             # Insert the final classification in a dict
-        #             self.characterization_classification_response[change_pattern] = ast.literal_eval(self.characterization_response[change_pattern][start_index:end_index].strip())
-        #             print("change_pattern: ", change_pattern, " - Result: ", self.characterization_classification_response[change_pattern])
-        #         except:
-        #             self.characterization_classification_response[change_pattern] = "Classification not in the expected format."
-        #             print("change_pattern: ", change_pattern, " - Result: ", self.characterization_classification_response[change_pattern])
-
-        # else:
-        #     ### Analysis prompt
-        #     user_prompt = (self.llm_instructions["introduction"] + self.llm_instructions["changes_informations"] + self.llm_instructions["bpmn_informations"])
-
-        #     # user_prompt += "### Control Flow Change Patterns ###\n"
-        #     # for change_pattern in change_pattern_list:
-        #     #     user_prompt += self.llm_instructions["controlflow_change_patterns"][change_pattern]
-            
-        #     # user_prompt += self.llm_instructions["paterns_rules"]
-
-        #     user_prompt += self.llm_instructions["concept_drift_analysis"]
-
-        #     # Call LLM response
-        #     print(user_prompt)
-        #     self.characterization_analysis = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, user_prompt) 
-        #     print(self.characterization_analysis)
-
-
-        #     ### Classification prompt
-        #     user_prompt = ("\n### Concept drift analysis of the BPMN diagrams and the detailed variations in activities and transitions ###\n" + self.characterization_analysis)
-
-        #     user_prompt += "### Control Flow Change Patterns ###\n"
-        #     for change_pattern in change_pattern_list:
-        #         user_prompt += self.llm_instructions["controlflow_change_patterns"][change_pattern]
-            
-        #     # user_prompt += self.llm_instructions["paterns_rules"]
-
-        #     user_prompt += self.llm_instructions["change_pattern_classification"]
-
-        #     # Call LLM response
-        #     print(user_prompt)
-        #     self.characterization_classification = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, user_prompt) 
-        #     print(self.characterization_classification)
-
-        #     # Finding the start and end of the dictionary string
-        #     try:
-        #         start_str = "result_dict = {"
-        #         end_str = "}"
-        #         start_index = self.characterization_classification.find(start_str) + len(start_str) - 1
-        #         end_index = self.characterization_classification.find(end_str, start_index) + 1
-
-        #         self.characterization_classification_dict = ast.literal_eval(self.characterization_classification[start_index:end_index].strip())
-        #     except:
-        #         self.characterization_classification_dict = "Classification not in the expected format."
+        print("################################ characterization_classification_dict #####################################")
+        print(self.characterization_classification_dict)
 
 
     def get_characterization_task(self) -> pd.DataFrame:
@@ -906,7 +832,8 @@ class TMPD():
         """
 
         """
-        return self.characterization_classification_dict, self.characterization_classification #, self.characterization_analysis
+        return self.characterization_classification_dict, self.characterization_classification, self.llm_transition_analysis_response, self.llm_bpmn_analysis_response
+        # return self.characterization_classification_dict, self.characterization_classification #, self.characterization_analysis
 
     def set_explanation_task(self) -> None:
 
