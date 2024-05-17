@@ -414,34 +414,12 @@ def llm_call_response(llm_company, llm_model, llm, user_prompt):
         return response.text
         
 
-def llm_instructions(llm_instructions_path, reference_bpmn_text, detection_bpmn_text, change_informations):
+def llm_instructions(llm_instructions_path):
 
     # Open the JSON file for reading
     with open(llm_instructions_path, 'r') as file:
         # Parse the yaml file into a Python dictionary
         llm_instructions = yaml.safe_load(file)
-
-    llm_instructions["changes_informations"] += ('''
-        ### Detailed data ###
-        {0}
-    ''').format(change_informations)
-
-    # llm_instructions["changes_informations"] += (
-    #     " - Transitions with variations in probability: {0}. \n"
-    #     " - Transitions with variations in in frequence: {1}. \n"
-    #     " - New transitions added to the process: {2}. \n"
-    #     " - Deleted transitions from the process: {3}. \n"
-    #     " - New activities added to the process: {4}. \n"
-    #     " - Deleted activities from the process: {5}. \n"
-    # ).format(change_informations["Changed_transition_probability"], change_informations["Changed_transition_frequency"], change_informations["Transitions_new"], change_informations["Transitions_Deleted"]
-    #         , change_informations["Activities_new"], change_informations["Activities_Deleted"] )
-    
-    llm_instructions["bpmn_informations"] += (
-        ''' 
-        ### BPMN diagrams ###
-        - The BPMN before the concept drift: {0}. \n
-        - The BPMN after the concept drift: {1}. \n
-    ''').format(reference_bpmn_text, detection_bpmn_text)
 
     # transform controlflow_change_patterns in dict
     consolidated_dict = {}
@@ -451,15 +429,36 @@ def llm_instructions(llm_instructions_path, reference_bpmn_text, detection_bpmn_
     llm_instructions["controlflow_change_patterns"] = consolidated_dict
                             
     return llm_instructions
-     
 
-# def llm_prompt_analysis(llm_instructions):
 
-#     prompt = (llm_instructions["introduction"] 
-#                    + llm_instructions["changes_informations"] 
-#                    + llm_instructions["bpmn_informations"] 
-#                    + llm_instructions["concept_drift_analysis"])
-#     return prompt
+def llm_bpmn_analysis_instructions(llm_instructions, reference_bpmn_text, detection_bpmn_text):
+
+    llm_instructions["bpmn_informations"] += (
+        ''' 
+        ### BPMN diagrams ###
+        - The BPMN before the concept drift: {0}. \n
+        - The BPMN after the concept drift: {1}. \n
+    ''').format(reference_bpmn_text, detection_bpmn_text)
+
+    return llm_instructions["bpmn_informations"]
+
+
+def llm_transition_analysis_instructions(llm_instructions, reference_bpmn_text, detection_bpmn_text, change_informations, llm_bpmn_analysis_response):
+
+    llm_instructions["changes_informations"] += (
+        '''
+            ### BPMN diagrams ###
+            - The BPMN before the concept drift: {0}. \n
+            - The BPMN after the concept drift: {1}. \n
+
+            ### BPMN diagrams comparison analysis ### 
+            {2}
+
+            ### Detailed data of transitions and activities ###
+            {3}
+        ''').format(reference_bpmn_text, detection_bpmn_text, llm_bpmn_analysis_response, change_informations)
+
+    return llm_instructions["changes_informations"]
 
 
 def llm_prompt_classification(llm_instructions, change_informations, llm_transition_analysis_response, llm_bpmn_analysis_response):

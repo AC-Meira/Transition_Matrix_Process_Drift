@@ -789,7 +789,7 @@ class TMPD():
 
 
         # Load LLM Instructions json and add contextualized informations
-        self.llm_instructions = TMPD_understanding_tasks.llm_instructions(llm_instructions_path, self.reference_bpmn_text, self.detection_bpmn_text, self.change_informations)
+        self.llm_instructions = TMPD_understanding_tasks.llm_instructions(llm_instructions_path)
 
     
 
@@ -798,18 +798,18 @@ class TMPD():
         """
 
         """
-
-        ### Transitions changes
-        llm_transition_analysis_prompt = self.llm_instructions["changes_informations"]
-        self.llm_transition_analysis_response = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, llm_transition_analysis_prompt)
-        print("################################ llm_transition_analysis_response #####################################")
-        print(self.llm_transition_analysis_response)
-
+        # , self.reference_bpmn_text, self.detection_bpmn_text, self.change_informations
         ### BPMN analysis
-        llm_bpmn_analysis_prompt = self.llm_instructions["bpmn_informations"]
+        llm_bpmn_analysis_prompt = TMPD_understanding_tasks.llm_bpmn_analysis_instructions(self.llm_instructions, self.reference_bpmn_text, self.detection_bpmn_text)
         self.llm_bpmn_analysis_response = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, llm_bpmn_analysis_prompt)
         print("################################ llm_bpmn_analysis_response #####################################")
         print(self.llm_bpmn_analysis_response)
+
+        ### Transitions changes
+        llm_transition_analysis_prompt = TMPD_understanding_tasks.llm_transition_analysis_instructions(self.llm_instructions, self.reference_bpmn_text, self.detection_bpmn_text, self.change_informations, self.llm_bpmn_analysis_response)
+        self.llm_transition_analysis_response = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, llm_transition_analysis_prompt)
+        print("################################ llm_transition_analysis_response #####################################")
+        print(self.llm_transition_analysis_response)
 
         ### Classification prompt
         # Prepare the prompt
