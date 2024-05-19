@@ -789,42 +789,49 @@ class TMPD():
 
 
         # Load LLM Instructions json and add contextualized informations
-        self.llm_instructions = TMPD_understanding_tasks.llm_instructions(llm_instructions_path)
+        self.llm_instructions = TMPD_understanding_tasks.llm_instructions_load(llm_instructions_path, self.reference_bpmn_text, self.detection_bpmn_text, self.change_informations)
 
     
 
-    def run_characterization_task(self, change_patterns_separated=False) -> None:
+    def run_characterization_task(self) -> None:
 
         """
 
         """
-        # , self.reference_bpmn_text, self.detection_bpmn_text, self.change_informations
-        ### BPMN analysis
-        llm_bpmn_analysis_prompt = TMPD_understanding_tasks.llm_bpmn_analysis_instructions(self.llm_instructions, self.reference_bpmn_text, self.detection_bpmn_text)
-        self.llm_bpmn_analysis_response = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, llm_bpmn_analysis_prompt)
-        print("################################ llm_bpmn_analysis_response #####################################")
-        print(self.llm_bpmn_analysis_response)
 
-        ### Transitions changes
-        llm_transition_analysis_prompt = TMPD_understanding_tasks.llm_transition_analysis_instructions(self.llm_instructions, self.reference_bpmn_text, self.detection_bpmn_text, self.change_informations, self.llm_bpmn_analysis_response)
-        self.llm_transition_analysis_response = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, llm_transition_analysis_prompt)
-        print("################################ llm_transition_analysis_response #####################################")
-        print(self.llm_transition_analysis_response)
+        ### BPMN diagram enhance
+        llm_bpmn_enhance_prompt = TMPD_understanding_tasks.llm_bpmn_enhance_instructions(self.llm_instructions, self.reference_bpmn_text, self.detection_bpmn_text, self.change_informations)
+        print(llm_bpmn_enhance_prompt)
+        self.llm_bpmn_enhance_response = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, llm_bpmn_enhance_prompt)
+        print("################################ llm_bpmn_enhance_response #####################################")
+        print(self.llm_bpmn_enhance_response)
 
-        ### Classification prompt
-        # Prepare the prompt
-        user_prompt_classification = TMPD_understanding_tasks.llm_prompt_classification(self.llm_instructions, self.change_informations, self.llm_transition_analysis_response, self.llm_bpmn_analysis_response) 
-        # print(user_prompt_classification)
+        # ### BPMN analysis
+        # llm_bpmn_analysis_prompt = TMPD_understanding_tasks.llm_bpmn_analysis_instructions(self.llm_instructions, self.reference_bpmn_text, self.detection_bpmn_text)
+        # self.llm_bpmn_analysis_response = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, llm_bpmn_analysis_prompt)
+        # print("################################ llm_bpmn_analysis_response #####################################")
+        # print(self.llm_bpmn_analysis_response)
 
-        # Call LLM response
-        self.characterization_classification = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, user_prompt_classification) 
-        print("################################ characterization_classification #####################################")
-        print(self.characterization_classification)
+        # ### Transitions changes
+        # llm_transition_analysis_prompt = TMPD_understanding_tasks.llm_transition_analysis_instructions(self.llm_instructions, self.reference_bpmn_text, self.detection_bpmn_text, self.change_informations, self.llm_bpmn_analysis_response)
+        # self.llm_transition_analysis_response = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, llm_transition_analysis_prompt)
+        # print("################################ llm_transition_analysis_response #####################################")
+        # print(self.llm_transition_analysis_response)
 
-        # Call LLM classification formatting
-        self.characterization_classification_dict = TMPD_understanding_tasks.llm_classification_formatting(self.characterization_classification)
-        print("################################ characterization_classification_dict #####################################")
-        print(self.characterization_classification_dict)
+        # ### Classification prompt
+        # # Prepare the prompt
+        # user_prompt_classification = TMPD_understanding_tasks.llm_prompt_classification(self.llm_instructions, self.change_informations, self.llm_transition_analysis_response, self.llm_bpmn_analysis_response) 
+        # # print(user_prompt_classification)
+
+        # # Call LLM response
+        # self.characterization_classification = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, user_prompt_classification) 
+        # print("################################ characterization_classification #####################################")
+        # print(self.characterization_classification)
+
+        # # Call LLM classification formatting
+        # self.characterization_classification_dict = TMPD_understanding_tasks.llm_classification_formatting(self.characterization_classification)
+        # print("################################ characterization_classification_dict #####################################")
+        # print(self.characterization_classification_dict)
 
 
     def get_characterization_task(self) -> pd.DataFrame:

@@ -7,6 +7,7 @@ Created on Sun Mar 04 17:00:46 2024
 
 import os
 import yaml
+from string import Template
 import ast
 import sys
 thismodule = sys.modules[__name__]
@@ -414,7 +415,7 @@ def llm_call_response(llm_company, llm_model, llm, user_prompt):
         return response.text
         
 
-def llm_instructions(llm_instructions_path):
+def llm_instructions_load(llm_instructions_path, reference_bpmn_text, detection_bpmn_text, change_informations):
 
     # Open the JSON file for reading
     with open(llm_instructions_path, 'r') as file:
@@ -429,6 +430,24 @@ def llm_instructions(llm_instructions_path):
     llm_instructions["controlflow_change_patterns"] = consolidated_dict
                             
     return llm_instructions
+
+
+
+def llm_bpmn_enhance_instructions(llm_instructions, reference_bpmn_text, detection_bpmn_text, change_informations):
+
+    llm_instructions["bpmn_diagram_enhance"] += (
+        ''' 
+        ### BPMN diagrams ###
+        - **The BPMN before the concept drift (reference window):** {0}.
+        - **The BPMN after the concept drift (detection window):** {1}.
+
+        ### Detailed data of transitions and activities ###
+        **List of transitions and activities:**
+        {2}
+        '''
+    ).format(reference_bpmn_text, detection_bpmn_text, change_informations)
+
+    return llm_instructions["bpmn_diagram_enhance"]
 
 
 def llm_bpmn_analysis_instructions(llm_instructions, reference_bpmn_text, detection_bpmn_text):
