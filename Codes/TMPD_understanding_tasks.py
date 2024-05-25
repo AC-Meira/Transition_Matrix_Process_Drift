@@ -234,19 +234,19 @@ def compare_dfgs(dfg1, dfg2):
         ,'Deleted transitions from the process': list(deleted_transitions) if deleted_transitions else ["None"]
         ,'New activities added to the process': list(new_activities) if new_activities else ["None"]
         ,'Deleted activities from the process': list(deleted_activities) if deleted_activities else ["None"]
-        ,'New start activities added to the process': list(new_start_activities) if new_start_activities else ["None"]
-        ,'Deleted start activities from the process': list(deleted_start_activities) if deleted_start_activities else ["None"]
-        ,'New end activities added to the process': list(new_end_activities) if new_end_activities else ["None"]
-        ,'Deleted end activities from the process': list(deleted_end_activities) if deleted_end_activities else ["None"]
+        # ,'New start activities added to the process': list(new_start_activities) if new_start_activities else ["None"]
+        # ,'Deleted start activities from the process': list(deleted_start_activities) if deleted_start_activities else ["None"]
+        # ,'New end activities added to the process': list(new_end_activities) if new_end_activities else ["None"]
+        # ,'Deleted end activities from the process': list(deleted_end_activities) if deleted_end_activities else ["None"]
 
-        ,'All transitions in the reference window': list(dfg1_transitions) if dfg1_transitions else ["None"]
-        ,'All transitions in the detection window': list(dfg2_transitions) if dfg2_transitions else ["None"]
-        ,'All activities in the reference window': list(dfg1_activities) if dfg1_activities else ["None"]
-        ,'All activities in the detection window': list(dfg2_activities) if dfg2_activities else ["None"]
-        ,'All start activities in the reference window': list(dfg1_start_activities) if dfg1_start_activities else ["None"]
-        ,'All start activities in the detection window': list(dfg2_start_activities) if dfg2_start_activities else ["None"]
-        ,'All end activities in the reference window': list(dfg1_end_activities) if dfg1_end_activities else ["None"]
-        ,'All end activities in the detection window': list(dfg2_end_activities) if dfg2_end_activities else ["None"]
+        # ,'All transitions in the reference window': list(dfg1_transitions) if dfg1_transitions else ["None"]
+        # ,'All transitions in the detection window': list(dfg2_transitions) if dfg2_transitions else ["None"]
+        # ,'All activities in the reference window': list(dfg1_activities) if dfg1_activities else ["None"]
+        # ,'All activities in the detection window': list(dfg2_activities) if dfg2_activities else ["None"]
+        # ,'All start activities in the reference window': list(dfg1_start_activities) if dfg1_start_activities else ["None"]
+        # ,'All start activities in the detection window': list(dfg2_start_activities) if dfg2_start_activities else ["None"]
+        # ,'All end activities in the reference window': list(dfg1_end_activities) if dfg1_end_activities else ["None"]
+        # ,'All end activities in the detection window': list(dfg2_end_activities) if dfg2_end_activities else ["None"]
     }
 
     return dfg_changes
@@ -473,14 +473,14 @@ def llm_transition_analysis_instructions(llm_instructions, reference_bpmn_text, 
             ### BPMN diagrams comparison analysis ### 
             {2}
 
-            ### Detailed data of transitions and activities ###
+            ### Transition and Activities comparison lists ###
             {3}
         ''').format(reference_bpmn_text, detection_bpmn_text, llm_bpmn_analysis_response, change_informations)
 
     return llm_instructions["changes_informations"]
 
-
-def llm_prompt_classification(llm_instructions, change_informations, llm_transition_analysis_response, llm_bpmn_analysis_response):
+#, llm_transition_analysis_response, llm_bpmn_analysis_response
+def llm_prompt_classification(llm_instructions, change_informations, reference_bpmn_text, detection_bpmn_text):
 
     # prompt = (llm_instructions["introduction"] 
     #     + llm_instructions["bpmn_informations"] 
@@ -488,16 +488,33 @@ def llm_prompt_classification(llm_instructions, change_informations, llm_transit
     #     + "\n### Control Flow Change Patterns ### \n"
     # )
 
-    prompt = llm_instructions["change_pattern_classification"]
+    # prompt = llm_instructions["change_pattern_classification"]
+
+    # prompt += (
+    #     ''' 
+    #     ### Analysis informations ###
+    #     - Alterations in activities and transitions: {0}. \n
+    #     - BPMN diagrams comparison analysis: {1}. \n
+    #     - list of pre-defined change patterns:
+
+    # ''').format(llm_transition_analysis_response, llm_bpmn_analysis_response)
+
+    prompt = llm_instructions["instructions_unified"]
 
     prompt += (
-        ''' 
-        ### Analysis informations ###
-        - Alterations in activities and transitions: {0}. \n
-        - BPMN diagrams comparison analysis: {1}. \n
-        - list of pre-defined change patterns:
+    ''' 
+    ### BPMN diagrams ###
+    - The BPMN before the concept drift: {0}. \n
+    - The BPMN after the concept drift: {1}. \n
 
-    ''').format(llm_transition_analysis_response, llm_bpmn_analysis_response)
+    ''').format(reference_bpmn_text, detection_bpmn_text)
+
+    prompt += (
+    ''' 
+    ### Transition and Activities comparison lists ###
+    {0} \n
+
+    ''').format(change_informations)
     
 
     # If there is at least a new or deleted activity, then suggest SRE, PRE, CRE, or RP

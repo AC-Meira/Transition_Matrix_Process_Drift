@@ -59,7 +59,7 @@ bpmn_informations: |
         - Changes that make any activity become skippable or non-skippable (activities in a conditional flow with at least another activity is not consider skippable).  
 
 
-
+#, and the BPMN diagrams comparison analysis.
 change_pattern_classification: |
     ### Introduction ###
     You are an technical analyst specialized in concept drift in process mining. 
@@ -67,7 +67,7 @@ change_pattern_classification: |
     This comprehensive analysis entails a side-by-side comparison of two distinct time frames representing the process before (reference window) and after the change (detection window).
 
     ### Analysis ###
-    You are provided with detailed analysis regarding alterations in activities and transitions analysis, and the BPMN diagrams comparison analysis.
+    You are provided with detailed analysis regarding alterations in activities and transitions analysis 
     Combine all informations previously analyzed and make a final and conclusive holistic analysis.
 
     ### Change pattern classification ### 

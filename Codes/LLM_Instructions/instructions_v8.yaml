@@ -1,84 +1,18 @@
-
-bpmn_diagram_enhance: |
-    ### Introduction ###
-    You are an expert in BPMN (Business Process Model and Notation) and Process Mining. 
-    You will receive two BPMN diagrams from two different time frames: one before (reference window) and one after (detection window) a concept drift. 
-    Your task is to enhance and correct these diagrams, which may be incomplete or incorrect, using the provided information about the transitions and activities in both windows.
-    Break down the process step-by-step. Start by understanding the provided BPMN diagrams and then incorporate the detailed data of transitions and activities to identify and correct any discrepancies.
-    In the end, output the revised bpmn diagrams in this format: 
-        ### BPMN diagrams revised ###
-        result_dict = {'reference_bpmn_text' : [revised reference bpmn diagram], 'detection_bpmn_text' : [revised detection bpmn diagram]}
-
-    ### BPMN diagrams understanding ###
-    A solid understanding of BPMN symbols is essential to identify structural changes. These changes may include modifications in sequences, parallelisms, conditional flows, loops, and silent transitions.
-
-    Understand BPMN Symbols: 
-        - Sequential fragments: '->'
-        - Parallel fragments: '+'
-        - Conditional fragments: 'X'
-        - Looping fragments: '*'
-        - Silent transitions: 'tau'
-        - Nested fragments: '()'
-        - Items within a fragment are separated by commas
-
-    Example: In the BPMN notation `->(A, X(B, ->(C, D)), E)`:
-        - The outermost fragment is a sequential fragment ('->'), indicating a sequence.
-        - The fragment contains three main items:
-            - A: a standalone activity.
-            - X: a conditional fragment, containing:
-                - B: a conditional activity.
-                - ->(C, D): a nested sequential fragment with activities C and D.
-            - E: another standalone activity following the conditional fragment.
-
-    ### Tasks ### 
-    1. **Understand the Provided BPMN Diagrams**
-    2. **Analyze the Detailed Data of Transitions and Activities**
-    3. **Identify and Correct Discrepancies**
-        - Start analysing the news and deleted activities and transitions.
-        - If any activity or transition is missing from the bpmn, make a detailed analysis of all activities envolved. Understand all relationship these activities have with any other activities.
-        - Investigate any transformations affecting the skippability of activities. In this case, you can use a XOR with a 'tau' to skip activities.
-    4. **Revise the BPMN Diagrams and format output**
-        - Activities can't appear multiple times.
-
-
-introduction: |
-    ### Introduction ###
-    You are an technical analyst specialized in concept drift in process mining. 
-    Your pivotal role involves a deep dive into the concept drift phenomena within a business process.
-    This comprehensive analysis entails a side-by-side comparison of BPMN diagrams from two distinct time frames representing the process before and after the change, 
-    alongside a detailed examination of variations in activities and transitions. 
-    
-
-changes_informations: |
+instructions_unified: |
     ### Introduction ###
     You are a technical analyst specializing in concept drift in process mining. 
     Your primary role is to investigate the phenomenon of concept drift by comparing two distinct phases of a business process: the reference window (before the change) and the detection window (after the change).
 
-    ### Analysis ###
-    You will receive a previously conducted analysis of BPMN diagrams that compare the reference and detection windows. 
-    While these diagrams offer a structured visual representation, they might not perfectly capture all aspects of the process changes. 
-    In addition to the diagram analysis, you will be provided with extensive data detailing all activities and transitions between activities for both time frames, along with identified changes from a preliminary comparison.
 
-    Your tasks are as follows:
-        - Confirm the accuracy of the BPMN diagram analysis using the additional detailed data.
-        - Delve deeper to uncover any discrepancies or nuances that the initial BPMN diagram analysis may have missed, particularly focusing on:
-            - Changes in the control-flow, including sequences, parallels, and conditionals.
-            - Movements of activities within the process flow.
-            - Adjustments in loops, which require inference from the process flow data.
-            - Investigate any transformations affecting the skippability of activities. Hint: If a new (or deleted) transition allow an activity to be skippable (or non-skippable) but it isn't in a conditional branch in the BPMN diagram, it's likely a skippability case.
+    ### BPMN diagrams Comparison ###
+    You will be provided with detailed BPMN diagrams for both time frame (reference and detection windows). Compare the BPMN diagrams identifying and highlighting if there are any differences regarding:
+        - Changes in the control-flow such as sequences, parallels, and conditionals.
+        - Changes in activities movements within the flow.
+        - Changes in loops and silent transitions ('tau'), which can indicate the skippability of an activity.
 
-    
-
-bpmn_informations: |
-    ### Introduction ###
-    You are a technical analyst specializing in concept drift in process mining. 
-    Your primary role is to investigate the phenomenon of concept drift by comparing two distinct phases of a business process: the reference window (before the change) and the detection window (after the change).
-
-    ### BPMN diagrams instructions ###
-    A critical component of your analysis involves a thorough comparison of BPMN diagrams before and after the detection of concept drift.
-    A solid understanding of BPMN symbols is essential to identify structural changes within the diagrams. These changes may include modifications in sequences, parallelisms, conditional flows, loops, and silent transitions.
-
-    Understand BPMN Symbols: 
+    To be able to compare the BPMN diagrams you need a solid grasp of BPMN symbols.
+    Such understanding is crucial for identifying structural changes within the diagrams, including modifications in sequences, parallelisms, conditional flows, loops, and silent transitions.
+    BPMN Symbols: 
         - Sequential fragments are denoted by '->'.
         - Parallel fragments by '+'.
         - Conditional fragments by 'X'.
@@ -87,43 +21,159 @@ bpmn_informations: |
         - Nested fragments are enclosed in parentheses '()'.
         - Items within a fragment are separated by commas.
 
-    Example: In the BPMN diagram notation ->(A, X(B, ->(C, D)), E), the structure is as follows:
-        - The outermost fragment is a sequential fragment ('->'), indicating that its components follow one after another.
-        - Within this sequential fragment, there are three main items:
-            - A - a standalone activity.
-            - A conditional fragment ('X') that contains further nested activities and fragments. Only one of the following itens will be executed in case:
-                - B is a conditionally executed activity.
-                - A nested sequential fragment ('->'), containing activities C and D.
-            - E - another activity that is part of the outer sequential fragment, following the conditional fragment.
+    For example: 
+        - In the BPMN diagram notation ->(A, X(B, ->(C, D)), E), the structure is as follows:
+            - The outermost fragment is a sequential fragment ('->'), indicating that its components follow one after another.
+            - Within this sequential fragment, there are three main items:
+                - 'A' is a standalone activity.
+                - A conditional fragment ('X') that contains further nested activities and fragments. Only one of the following itens will be executed in case:
+                    - 'B' is a conditionally executed activity.
+                    - A nested sequential fragment ('->'), containing activities 'C' and 'D'.
+                - 'E' is another activity that is part of the outer sequential fragment, following the conditional fragment.
 
-    ### Analysis ###
-    You are provided with detailed BPMN diagrams for both the reference and detection windows. Compare these diagrams to identify and highlight any differences, focusing on:
-        - Changes in the control-flow such as sequences, parallels, and conditionals.
-        - Changes in activities movements within the flow.
-        - Changes in loops and silent transitions ('tau'), which can indicate the skippability of an activity.
+    BPMN diagram comparation demonstration:
+        1. Demonstration:
+            - The BPMN before the concept drift (reference window): ->(A, B, C, D, E).
+            - The BPMN after the concept drift (detection window): ->(A, X(B, ->(C, D)), E).
+            - Comparison: 
+                - A new conditional (X) fragment was added in the detection window, including activity 'B' in one branch and a sequential fragment in the other with activities 'C' and 'D'. 
+                - No activity was moved.
+                - No loop or silent transitions were added or deleted.
+        2. Demonstration:
+            - The BPMN before the concept drift (reference window): ->(A, X(B, ->(C, D)), E).
+            - The BPMN after the concept drift (detection window): ->(E, X(C, ->(D, B)), A).
+            - Comparison:
+                - No change involving sequences, parallels, or conditionals.
+                - Activities 'A' and 'E' swapped positions in the detection window. Activity 'C', 'D', and 'B' were moved inside the conditional ('X') fragment, where in one branch is 'A' and in the other branch is a sequential fragment with activities 'D' and 'B'.
+                - No loop or silent transitions were added or deleted.
+        3. Demonstration:
+            - The BPMN before the concept drift (reference window): ->(A, B, C, D, E, F).
+            - The BPMN after the concept drift (detection window): ->(*(->(A, B)), C, X(D, 'tau'), E, F).
+            - Comparison:
+                - New loop ('*') fragment was added in the detection window, including a sequential with activities 'A' and 'B'.
+                - New coditional (X) fragment was added in the detection window, including activity 'D' in one branch and a 'tau' in the other, which means that the activity 'D' become skippable.
+                - No activity was moved.
 
 
+    ### Transition and Activities analysis ###
+    You will be provided with lists showing all activities and transitions changes between the reference and detection windows in the following format:
+        - New transitions added to the process
+        - Deleted transitions from the process
+        - New activities added to the process
+        - Deleted activities from the process
 
-change_pattern_classification: |
-    ### Introduction ###
-    You are a technical analyst specializing in concept drift in process mining. 
-    Your primary role is to investigate the phenomenon of concept drift by comparing two distinct phases of a business process: the reference window (before the change) and the detection window (after the change).
+    Based on them, you will need to:
+        - Check if the BPMN diagrams correctly represent the changes in the lists. These lists may contain changes that are not explicitly represented in the BPMN diagrams. These list are the most reliable sources of information.
+        - If the BPMN diagrams are not correct or are missing some information, correct the previous analysis or add new analysis. You do not need to correct the BPMN diagrams rewriting them.
+        - Compare both windows with these news informations regarding:
+            - Changes in the control-flow such as sequences, parallels, and conditionals.
+            - Changes in activities movements within the flow.
+            - Changes in loops and silent transitions ('tau'), which can indicate the skippability of an activity.
 
-    ### Analysis ###
-    You are provided with detailed analysis regarding alterations in activities and transitions analysis, and the BPMN diagrams comparison analysis.
+    Transition and Activities analysis demonstration:
+        1. Demonstration:
+            - BPMN diagram comparation (from the previous step): 
+                - The BPMN before the concept drift (reference window): ->('A', 'B', 'C', 'D', *( X( 'E', 'F' ), tau )).
+                - The BPMN after the concept drift (detection window): ->('A', 'C', X( 'B', 'D' ), *( X( 'E', 'F' ), tau )).
+                - Comparison:
+                    - New loop ('*') fragment was added in the detection window, including a sequential with activities 'A' and 'B'.
+                    - No activity was moved.
+                    - No silent transitions were added or deleted.
+            - Transition and Activities comparison lists (provided):
+                - New transitions added to the process: [('C', 'B'), ('B', 'F'), ('A', 'C')]
+                - Deleted transitions from the process: [('B', 'C'), ('A', 'B')]
+                - New activities added to the process: ['None']
+                - Deleted activities from the process: ['None']
+            - Transition and Activities analysis:
+                - New transitions were added to the process:
+                    - ('C', 'B') is a new transition added due to the inclusion of the conditional (X) fragment in the detection window after activity 'C', where activity 'B' is included. This new transition is correctly represented in the BPMN diagram.
+                    - ('B', 'F') is a new transition added in the detection window which connects two activities that seems be far away from each other. Let's analyze it further:
+                        - According with the detection BPMN diagram, activity 'B' is in conditional (X) fragment with activity 'D', which means either 'B' or 'D' can be executed.
+                        - According with the detection BPMN diagram, activity 'F' is in conditional (X) fragment with activity 'E', and this conditional fragment is in a loop fragment with a silent transition '(tau'). This means that either 'E' or 'F' or none ('tau') or any combination can be executed due to the loop.
+                        - Since the conditional fragment of activity 'B' is right before the loop and conditional fragment of activity 'F', that means that activity 'F' can be executed right after activity 'B'. 
+                        - Therefore, this new transition is correctly represented in the BPMN diagram.
+                    - ('A', 'C') is a new transition added in the detection window due to the movement of activity 'C', which is correctly represented in the BPMN diagram.
+                - Deleted transitions from the process:
+                    - ('B', 'C') is a deleted transition, which is correctly represented in the BPMN diagram.
+                    - ('A', 'B') is a deleted transition, which is correctly represented in the BPMN diagram.
+        2. Demonstration:
+            - BPMN diagram comparation (from the previous step): 
+                - The BPMN before the concept drift (reference window): ->(A, B, C, D, E, F).
+                - The BPMN after the concept drift (detection window): ->(*(->(A, B)), C, D, E, F).
+                - Comparison:
+                    - New loop ('*') fragment was added in the detection window, including a sequential with activities 'A' and 'B'.
+                    - No activity was moved.
+                    - No silent transitions were added or deleted.
+            - Transition and Activities comparison lists (provided):
+                - New transitions added to the process: [('B', 'A'), ('C', 'E')]
+                - Deleted transitions from the process: ['None']
+                - New activities added to the process: ['None']
+                - Deleted activities from the process: ['None']
+            - Transition and Activities analysis:
+                - New transitions were added to the process:
+                    - ('B', 'A') is a new transition added due to the inclusion of the loop ('*') fragment in the detection window. This new transition is closing the loop. It confirms the change in the BPMN diagram.
+                    - ('C', 'E') is a new transition added in the detection window but there is no representation of it in the BPMN diagram. BPMN must have been missing this new transition. Let's analyze it further:
+                        - According with the detection BPMN diagram, activities 'C', 'D' and 'E' are in sequential fragment, which means after activity 'C' comes activity 'D' and after 'D' comes activity 'E'.
+                        - However, if this new transition from 'C' to 'E', it is creating a new conextion between 'C' and 'E' that doesn't need to pass through 'D'.
+                        - If 'D' and 'E' had been transformed into a conditional fragment, e.g. X('D', 'E'), then one additional new transition must had existed from 'D' to 'F', which is not the case.
+                        - Therefore, this new transition means that activity 'D' become skippable. The detection BPMN diagram is slightly inaccurate because it is missing the silent transition'(tau').
+        
+
+
+    ### Change pattern classification ###
+    You will be provided with a list of pre-defined change patterns. You can find a brief description of each of them, as well as examples using a BPMN diagram and a list of evidences that can help confirm the pattern.
     Combine all informations previously analyzed and make a final and conclusive holistic analysis.
-
-    ### Change pattern classification ### 
-    You are provided with a list of pre-defined change patterns.
     Classify whether a concept drift occurred and identify the most significant change pattern that has occurred and identify which activities are involved. 
     
-    ### Formating ###
+
+    ### Output Formating ###
     Format your conclusion as follows, providing a clear and concise verdict on whether the change pattern is present: 
     '### result_dict = {'concept_drift' : ['No'], 'change_pattern' : ['None'], 'activities' : ['None']} 
     or '### result_dict = {'concept_drift' : ['Yes'], 'change_pattern' : ['pattern_acronym'], 'activities' : ['A', 'B']}. 
-    Do it step by step.
 
 
+# bpmn_diagram_enhance: |
+#     ### Introduction ###
+#     You are an expert in BPMN (Business Process Model and Notation) and Process Mining. 
+#     You will receive two BPMN diagrams from two different time frames: one before (reference window) and one after (detection window) a concept drift. 
+#     Your task is to enhance and correct these diagrams, which may be incomplete or incorrect, using the provided information about the transitions and activities in both windows.
+#     Break down the process step-by-step. Start by understanding the provided BPMN diagrams and then incorporate the detailed data of transitions and activities to identify and correct any discrepancies.
+#     In the end, output the revised bpmn diagrams in this format: 
+#         ### BPMN diagrams revised ###
+#         result_dict = {'reference_bpmn_text' : [revised reference bpmn diagram], 'detection_bpmn_text' : [revised detection bpmn diagram]}
+
+#     ### BPMN diagrams understanding ###
+#     A solid understanding of BPMN symbols is essential to identify structural changes. These changes may include modifications in sequences, parallelisms, conditional flows, loops, and silent transitions.
+
+#     Understand BPMN Symbols: 
+#         - Sequential fragments: '->'
+#         - Parallel fragments: '+'
+#         - Conditional fragments: 'X'
+#         - Looping fragments: '*'
+#         - Silent transitions: 'tau'
+#         - Nested fragments: '()'
+#         - Items within a fragment are separated by commas
+
+#     Example: In the BPMN notation `->(A, X(B, ->(C, D)), E)`:
+#         - The outermost fragment is a sequential fragment ('->'), indicating a sequence.
+#         - The fragment contains three main items:
+#             - A: a standalone activity.
+#             - X: a conditional fragment, containing:
+#                 - B: a conditional activity.
+#                 - ->(C, D): a nested sequential fragment with activities C and D.
+#             - E: another standalone activity following the conditional fragment.
+
+#     ### Tasks ### 
+#     1. **Understand the Provided BPMN Diagrams**
+#     2. **Analyze the Detailed Data of Transitions and Activities**
+#     3. **Identify and Correct Discrepancies**
+#         - Start analysing the news and deleted activities and transitions.
+#         - If any activity or transition is missing from the bpmn, make a detailed analysis of all activities envolved. Understand all relationship these activities have with any other activities.
+#         - Investigate any transformations affecting the skippability of activities. In this case, you can use a XOR with a 'tau' to skip activities.
+#     4. **Revise the BPMN Diagrams and format output**
+#         - Activities can't appear multiple times.
+
+    
 controlflow_change_patterns:
     - sre_instructions: | 
         SRE (Serial Remove/Add):
@@ -243,7 +293,7 @@ controlflow_change_patterns:
     - lp_instructions: |
         LP (Loop):
          - If there is new or deleted loop fragment where the relational dynamics among the activities involved remain fundamentally unchanged, except for the alteration in their loopability then is LP pattern. 
-         - For example, the BPMN diagram could change from '->(A, *(B, C, D), E)' to '->(A, B, C, D, E)' or vice versa or vice versa, where B, C, and D are the activities involved.
+         - For example, the BPMN diagram could change from '->(A, B, C, D, E)' to '->(A, *(B, C, D), E)' or vice versa or vice versa, where B, C, and D are the activities involved.
          - Evidence:
              - New or deleted loop (*) fragment in BPMN diagram comparison.
              - New or deleted transitions in the list of variations involving the activities involved in the change pattern.
