@@ -743,14 +743,10 @@ class TMPD():
         # Combine changed transtions list with DFG changes
         self.change_informations = changed_transitions_dict | dfg_changes
 
-        # Covert DFG to process trees 
-        self.reference_process_tree = TMPD_understanding_tasks.create_process_tree_from_dfg(self.reference_dfg, parameters={"noise_threshold": 0})
-        self.detection_process_tree = TMPD_understanding_tasks.create_process_tree_from_dfg(self.detection_dfg, parameters={"noise_threshold": 0}) 
-
-        self.reference_bpmn_text = self.reference_process_tree._get_root()
-        self.detection_bpmn_text = self.detection_process_tree._get_root()
+        # Covert DFG to process trees and get BPMN diagram text
+        self.reference_bpmn_text = TMPD_understanding_tasks.create_process_tree_from_dfg(self.reference_dfg, parameters={"noise_threshold": 0})
+        self.detection_bpmn_text = TMPD_understanding_tasks.create_process_tree_from_dfg(self.detection_dfg, parameters={"noise_threshold": 0}) 
         
-
         
          
     def get_localization_task(self, show_localization_dfg=True,show_original_dfg=False, show_original_bpmn=False) -> pd.DataFrame:
