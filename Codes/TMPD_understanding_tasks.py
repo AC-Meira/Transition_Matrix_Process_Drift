@@ -256,6 +256,25 @@ def create_bpmn_from_dfg(dfg):
     return pm4py.discover_bpmn_inductive(dfg, noise_threshold=0)
 
 
+def wrap_text(text, max_length=10):
+    # Replace underscores with spaces to handle words like "Loan_application_received"
+    text = text.replace('_', ' ')
+    words = text.split()
+    wrapped_text = ""
+    current_length = 0
+
+    for word in words:
+        if current_length + len(word) + 1 > max_length:
+            wrapped_text += '\n' + word
+            current_length = len(word)
+        else:
+            if wrapped_text:
+                wrapped_text += ' '
+                current_length += 1
+            wrapped_text += word
+            current_length += len(word)
+
+    return wrapped_text
 
 def localization_dfg_visualization(dfg, change_informations, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2"):
     
@@ -268,13 +287,16 @@ def localization_dfg_visualization(dfg, change_informations, bgcolor="white", ra
     deleted_activities = change_informations['Deleted activities from the process']
 
     edge_annotations = {}
-    for key, transitions in {key: val for key, val in change_informations.items() if key.startswith("Transitions with variations in")}.items():
-        suffix = key.split('_')[-1]  # Extract suffix
-        for transition in transitions:
-            if transition in edge_annotations:
-                edge_annotations[transition].append(suffix)
-            else:
-                edge_annotations[transition] = [suffix]
+    for key, transitions in change_informations.items():
+        if key.startswith("Transitions with variations in"):
+            # Strip the unwanted prefix and get the part after it
+            prefix_length = len("Transitions with variations in")
+            suffix = key[prefix_length:].strip()  # Optionally remove any leading or trailing whitespace
+            for transition in transitions:
+                if transition in edge_annotations:
+                    edge_annotations[transition].append(suffix)
+                else:
+                    edge_annotations[transition] = [suffix]
 
 
     dot = Digraph(engine='dot', graph_attr={'bgcolor': bgcolor, 'rankdir': rankdir})
@@ -286,8 +308,9 @@ def localization_dfg_visualization(dfg, change_informations, bgcolor="white", ra
     # Add nodes and edges to the graph
     for (source, target), count in dfg_graph.items():
         # Set node shapes and labels
-        source_label = f"{source} ({start_activities.get(source, count)})"
-        target_label = f"{target} ({end_activities.get(target, count)})"
+        source_label = wrap_text(f"{source} ({start_activities.get(source, count)})", max_length=15)
+        target_label = wrap_text(f"{target} ({end_activities.get(target, count)})", max_length=15)
+
 
         # Determine node colors based on activity status
         source_color = 'blue' if source in new_activities else 'red' if source in deleted_activities else 'black'
@@ -308,9 +331,12 @@ def localization_dfg_visualization(dfg, change_informations, bgcolor="white", ra
 
         # Add edges
         if (source, target) in edge_annotations:
-            dot.edge(source, target, label=str(count) + ' (Dif. in ' +', '.join(edge_annotations[(source, target)]) + ')', color=edge_color, penwidth=edge_penwidth) 
+            dot.edge(source, target
+                    , label="Freq: " + str(count) + '\nDif. in '
+                        + '\nDif. in '.join(edge_annotations[(source, target)])
+                    , color=edge_color, penwidth=edge_penwidth) 
         else: 
-            dot.edge(source, target, label=str(count), color=edge_color, penwidth=edge_penwidth)
+            dot.edge(source, target, label="Freq: " + str(count), color=edge_color, penwidth=edge_penwidth)
 
     # Connect the start node to the real start activities and the real end activities to the end node
     for act in start_activities:
@@ -327,9 +353,12 @@ def localization_dfg_visualization(dfg, change_informations, bgcolor="white", ra
                 edge_color = 'orange'
 
             if ('START', act) in edge_annotations: 
-                dot.edge('START', act, label=str(count) + ' (Dif. in ' +', '.join(edge_annotations[('START', act)]) + ')', color=edge_color, style='bold', penwidth=edge_penwidth)
+                dot.edge('START', act
+                         , label="Freq: " + str(count) + '\nDif. in '
+                            + '\nDif. in '.join(edge_annotations[('START', act)])
+                        , color=edge_color, style='bold', penwidth=edge_penwidth)
             else:
-                dot.edge('START', act, label=str(count), color=edge_color, style='bold', penwidth=edge_penwidth)
+                dot.edge('START', act, label="Freq: " + str(count), color=edge_color, style='bold', penwidth=edge_penwidth)
 
     for act in end_activities:
         if act not in start_activities:  # Avoid connecting start activities again
@@ -345,9 +374,12 @@ def localization_dfg_visualization(dfg, change_informations, bgcolor="white", ra
                 edge_color = 'orange'
 
             if (act, 'END') in edge_annotations: 
-                dot.edge(act, 'END', label=str(count) + ' (Dif. in ' +', '.join(edge_annotations[(act, 'END')]) + ')', color=edge_color, style='bold', penwidth=edge_penwidth)
+                dot.edge(act, 'END'
+                         , label="Freq: " + str(count) + '\nDif. in '
+                            + '\nDif. in '.join(edge_annotations[(act, 'END')])
+                        , color=edge_color, style='bold', penwidth=edge_penwidth)
             else:
-                dot.edge(act, 'END', label=str(count), color=edge_color, style='bold', penwidth=edge_penwidth)
+                dot.edge(act, 'END', label="Freq: " + str(count), color=edge_color, style='bold', penwidth=edge_penwidth)
 
     # Render and display the graph inline in Jupyter Notebook
     png_data = dot.pipe(format='png')
@@ -429,7 +461,7 @@ def llm_call_response(llm_company, llm_model, llm, user_prompt):
         return response.text
         
 
-def llm_instructions_load(llm_instructions_path, reference_bpmn_text, detection_bpmn_text, change_informations):
+def llm_instructions_load(llm_instructions_path):
 
     # Open the JSON file for reading
     with open(llm_instructions_path, 'r') as file:
@@ -464,17 +496,6 @@ def llm_instructions_load(llm_instructions_path, reference_bpmn_text, detection_
 #     return llm_instructions["bpmn_diagram_enhance"]
 
 
-# def llm_bpmn_analysis_instructions(llm_instructions, reference_bpmn_text, detection_bpmn_text):
-
-#     llm_instructions["bpmn_informations"] += (
-#         ''' 
-#         ### BPMN diagrams ###
-#         - The BPMN before the concept drift: {0}. \n
-#         - The BPMN after the concept drift: {1}. \n
-#     ''').format(reference_bpmn_text, detection_bpmn_text)
-
-#     return llm_instructions["bpmn_informations"]
-
 
 # def llm_transition_analysis_instructions(llm_instructions, reference_bpmn_text, detection_bpmn_text, change_informations, llm_bpmn_analysis_response):
 
@@ -493,110 +514,137 @@ def llm_instructions_load(llm_instructions_path, reference_bpmn_text, detection_
 
 #     return llm_instructions["changes_informations"]
 
-#, llm_transition_analysis_response, llm_bpmn_analysis_response
-def llm_prompt_classification(llm_instructions, change_informations, reference_bpmn_text, detection_bpmn_text):
 
-    # prompt = (llm_instructions["introduction"] 
-    #     + llm_instructions["bpmn_informations"] 
-    #     + llm_instructions["changes_informations"] 
-    #     + "\n### Control Flow Change Patterns ### \n"
-    # )
+def llm_bpmn_analysis_prompt(llm_instructions, reference_bpmn_text, detection_bpmn_text):
 
-    # prompt = llm_instructions["change_pattern_classification"]
-
-    # prompt += (
-    #     ''' 
-    #     ### Analysis informations ###
-    #     - Alterations in activities and transitions: {0}. \n
-    #     - BPMN diagrams comparison analysis: {1}. \n
-    #     - list of pre-defined change patterns:
-
-    # ''').format(llm_transition_analysis_response, llm_bpmn_analysis_response)
-
-    prompt = llm_instructions["instructions_unified"] 
-
-    # prompt += (
-    # ''' 
-    # ### Control-flow Change Patterns ### \n
-    # ''')
-
-    # # If there is at least a new or deleted activity, then suggest SRE, PRE, CRE, or RP
-    # if change_informations['New activities added to the process'] != ['None'] or change_informations['Deleted activities from the process'] != ['None']:
-    #     prompt += (llm_instructions['controlflow_change_patterns']['sre_instructions'] 
-    #               + llm_instructions['controlflow_change_patterns']['pre_instructions'] 
-    #               + llm_instructions['controlflow_change_patterns']['cre_instructions'] 
-    #               + llm_instructions['controlflow_change_patterns']['rp_instructions'] 
-    #     )
-
-    #     # prompt += (
-    #     # ''' 
-    #     # \n### Transition and Activities comparison lists ###
-    #     # \n'New transitions added to the process': {0}.
-    #     # \n'Deleted transitions from the process': {1}.
-    #     # \n'New activities added to the process': {2}.
-    #     # \n'Deleted activities from the process': {3}.
-
-    #     # ''').format(change_informations['New transitions added to the process'], change_informations['Deleted transitions from the process'], change_informations['New activities added to the process'], change_informations['Deleted activities from the process'])
-
-    # # If the changes don't involve addition or deletion of activities but rather addition or deletion of transitions between existing activities, then suggest SM, CM, PM, or SW, CF, PL, LP,CD,  CB, or CP
-    # elif change_informations['New transitions added to the process'] != ['None'] or change_informations['Deleted transitions from the process'] != ['None']:
-    #     # Movement Patterns
-    #     prompt += (llm_instructions['controlflow_change_patterns']['sm_instructions'] 
-    #             + llm_instructions['controlflow_change_patterns']['cm_instructions'] 
-    #             + llm_instructions['controlflow_change_patterns']['pm_instructions'] 
-    #             + llm_instructions['controlflow_change_patterns']['sw_instructions'] 
-    #     )
-
-    #     # Gateway Type Changes
-    #     prompt += (llm_instructions['controlflow_change_patterns']['pl_instructions'] 
-    #             + llm_instructions['controlflow_change_patterns']['cf_instructions'] 
-    #     )
-
-    #     # Synchronization (Parallel involved)
-    #     prompt += (llm_instructions['controlflow_change_patterns']['cd_instructions'] 
-    #     )
-
-    #     # Bypass (XOR involved)
-    #     prompt += (llm_instructions['controlflow_change_patterns']['cb_instructions'] 
-    #     )
-
-    #     # Loop Fragment Changes
-    #     prompt += (llm_instructions['controlflow_change_patterns']['lp_instructions'] 
-    #                #llm_instructions['controlflow_change_patterns']['cp_instructions'] 
-    #     )
-
-    #     # prompt += (
-    #     # ''' 
-    #     # \n### Transition and Activities comparison lists ###
-    #     # \n'New transitions added to the process': {0}.
-    #     # \n'Deleted transitions from the process': {1}.
-    #     # \n'New activities added to the process': {2}.
-    #     # \n'Deleted activities from the process': {3}.
-
-    #     # ''').format(change_informations['New transitions added to the process'], change_informations['Deleted transitions from the process'], change_informations['New activities added to the process'], change_informations['Deleted activities from the process'])
-
-
-    # # If the changes don't involve addition or deletion of activities nor addition or deletion of transitions between existing activities, but rather only changes in the transitions, then is FR
-    # else:
-    #     prompt += (
-    #         llm_instructions['controlflow_change_patterns']['fr_instructions'] 
-    #     )
-
-    #     # prompt += (
-    #     # ''' 
-    #     # \n### Transition and Activities comparison lists ###\n
-    #     # {0}
-
-    #     # ''').format(change_informations)
-
-
-    prompt += (
+    # Add BPMN diagrams to prompt
+    llm_instructions["instructions_bpmn_analysis"] += (
     ''' 
     \n### BPMN diagrams ###
     - The BPMN before the concept drift: {0}. \n
     - The BPMN after the concept drift: {1}. \n
 
     ''').format(reference_bpmn_text, detection_bpmn_text)
+
+    return llm_instructions["instructions_bpmn_analysis"]
+
+
+def llm_classification_prompt(llm_instructions, change_informations, reference_bpmn_text, detection_bpmn_text, llm_bpmn_analysis_response):
+
+    # prompt += (
+    # ''' 
+    # \n### BPMN diagrams ###
+    # - The BPMN before the concept drift: {0}. \n
+    # - The BPMN after the concept drift: {1}. \n
+
+    # ''').format(reference_bpmn_text, detection_bpmn_text)
+
+    # Get the prompt
+    prompt = llm_instructions["instructions_classification"] 
+
+    # Add BPMN Diagrams Comparison Analysis to prompt
+    prompt += (
+        ''' 
+        \n### BPMN Diagrams Comparison Analysis ###
+        {0}. \n
+
+        ''').format(llm_bpmn_analysis_response)
+    
+
+    ### Add Transition and Activities Changes List and Control-flow Change Patterns to prompt depending on conditions
+    
+    # If there is at least a new or deleted activity, then suggest SRE, PRE, CRE, or RP
+    if change_informations['New activities added to the process'] != ['None'] or change_informations['Deleted activities from the process'] != ['None']:
+        
+        prompt += (
+        ''' 
+        \n### Transition and Activities Changes List ###
+        \n'New transitions added to the process': {0}.
+        \n'Deleted transitions from the process': {1}.
+        \n'New activities added to the process': {2}.
+        \n'Deleted activities from the process': {3}.
+
+        ''').format(change_informations['New transitions added to the process']
+                    , change_informations['Deleted transitions from the process']
+                    , change_informations['New activities added to the process']
+                    , change_informations['Deleted activities from the process'])
+        
+        prompt += (
+        ''' 
+        \n### Control-flow Change Patterns ###\n
+        ''')
+        prompt += (
+            llm_instructions['controlflow_change_patterns']['sre_instructions'] 
+            + llm_instructions['controlflow_change_patterns']['pre_instructions'] 
+            + llm_instructions['controlflow_change_patterns']['cre_instructions'] 
+            + llm_instructions['controlflow_change_patterns']['rp_instructions'] 
+        )  
+
+    # If the changes don't involve addition or deletion of activities but rather addition or deletion of transitions between existing activities, then suggest SM, CM, PM, or SW, CF, PL, LP,CD,  CB, or CP
+    elif change_informations['New transitions added to the process'] != ['None'] or change_informations['Deleted transitions from the process'] != ['None']:
+        
+        prompt += (
+        ''' 
+        \n### Transition and Activities Changes List ###
+        \n'New transitions added to the process': {0}.
+        \n'Deleted transitions from the process': {1}.
+        \n'New activities added to the process': {2}.
+        \n'Deleted activities from the process': {3}.
+
+        ''').format(change_informations['New transitions added to the process']
+                    , change_informations['Deleted transitions from the process']
+                    , change_informations['New activities added to the process']
+                    , change_informations['Deleted activities from the process'])
+
+        prompt += (
+        ''' 
+        \n### Control-flow Change Patterns ###\n
+        ''')
+
+        # Movement Patterns
+        prompt += (llm_instructions['controlflow_change_patterns']['sm_instructions'] 
+                + llm_instructions['controlflow_change_patterns']['cm_instructions'] 
+                + llm_instructions['controlflow_change_patterns']['pm_instructions'] 
+                + llm_instructions['controlflow_change_patterns']['sw_instructions'] 
+        )
+
+        # Gateway Type Changes
+        prompt += (llm_instructions['controlflow_change_patterns']['pl_instructions'] 
+                + llm_instructions['controlflow_change_patterns']['cf_instructions'] 
+        )
+
+        # Synchronization (Parallel involved)
+        prompt += (llm_instructions['controlflow_change_patterns']['cd_instructions'] 
+        )
+
+        # Bypass (XOR involved)
+        prompt += (llm_instructions['controlflow_change_patterns']['cb_instructions'] 
+        )
+
+        # Loop Fragment Changes
+        prompt += (llm_instructions['controlflow_change_patterns']['lp_instructions'] 
+                   #llm_instructions['controlflow_change_patterns']['cp_instructions'] 
+        )
+
+
+    # If the changes don't involve addition or deletion of activities nor addition or deletion of transitions between existing activities, but rather only changes in the transitions, then is FR
+    else:
+
+        prompt += (
+        ''' 
+        \n### Transition and Activities Changes List ###\n
+        {0}
+
+        ''').format(change_informations)
+
+        prompt += (
+        ''' 
+        \n### Control-flow Change Patterns ###\n
+        ''')
+
+        prompt += (
+            llm_instructions['controlflow_change_patterns']['fr_instructions'] 
+        )
 
 
     return prompt
