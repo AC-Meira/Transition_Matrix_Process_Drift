@@ -1,7 +1,7 @@
 # Local
 Temp/
 Input/
-Experiments/Results/*_files
+Experiments/Results
 old/
 .vscode
 *.xlsx
