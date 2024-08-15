@@ -4,8 +4,6 @@ Input/
 Experiments/Results
 old/
 .vscode
-*.xlsx
-*.csv
 *.jar
 *.docx
 
