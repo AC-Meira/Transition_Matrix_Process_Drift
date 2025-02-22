@@ -125,6 +125,8 @@ class TMPD():
             elif self.timestamp_format is not None:
                 event_log['timestamp'] = pd.to_datetime(event_log['timestamp'], format=self.timestamp_format)
 
+            # Create an id based on the order of the event in the raw event log
+            event_log["event_order"] = event_log.index
 
             # Add a Start and End activities case it doesn't have
             event_log = TMPD_utils.add_start_end_activities(event_log=event_log, case_id_col="case_id", activity_col="activity", timestamp_col="timestamp")
@@ -132,9 +134,10 @@ class TMPD():
             # Create the transition log
             transition_log = pd.concat([event_log[['case_id']], event_log.add_suffix('_from'), event_log.groupby('case_id').shift(-1).add_suffix('_to')], axis=1).drop(columns=['case_id_from'])
             transition_log = transition_log.dropna(subset = ['activity_to'])
-            transition_log = transition_log.reset_index(names='original_index') 
-            transition_log["transition_id"] = transition_log.index
             transition_log['case_order'] = transition_log.groupby('case_id').cumcount()
+            transition_log.sort_values(by=['event_order_from', 'event_order_to'], inplace=True)
+            transition_log.reset_index(drop=True, inplace=True) 
+            transition_log["transition_id"] = transition_log.index
 
             # Store the transition log in the object
             self.transition_log = transition_log
@@ -371,34 +374,34 @@ class TMPD():
                 print("Error: ", e)
 
         # Add time features
-        for time_feature in self.time_features:
+        for method, time_feature in self.time_features:
             try:
-                process_features_dict[time_feature] = getattr(TMPD_process_features, "get_feature_" + time_feature)(process_representation_df, transition_log, time_feature, self.time_features[time_feature])
+                process_features_dict[f"{method}_{time_feature}"] = getattr(TMPD_process_features, "get_feature_" + method)(process_representation_df, transition_log, method, time_feature)
             except Exception as e:
-                print("Error in time_feature representation: ", time_feature)
+                print("Error in time_feature representation: ", method, " and ", time_feature)
                 print("Error: ", e)
 
         # Add resource features
-        for resource_feature in self.resource_features:
+        for method, resource_feature in self.resource_features:
             try:
-                process_features_dict[resource_feature] = getattr(TMPD_process_features, "get_feature_" + resource_feature)(process_representation_df, transition_log, resource_feature, self.resource_features[resource_feature])
+                process_features_dict[f"{method}_{resource_feature}"] = getattr(TMPD_process_features, "get_feature_" + method)(process_representation_df, transition_log, method, resource_feature)
             except Exception as e:
-                print("Error in resource_feature representation: ", resource_feature)
+                print("Error in resource_feature representation: ", method, " and ", resource_feature)
                 print("Error: ", e)
 
         # Add data features
-        for data_feature in self.data_features:
+        for method, data_feature in self.data_features:
             try:
-                process_features_dict[data_feature] = getattr(TMPD_process_features, "get_feature_" + data_feature)(process_representation_df, transition_log, data_feature, self.data_features[data_feature])
+                process_features_dict[f"{method}_{data_feature}"] = getattr(TMPD_process_features, "get_feature_" + method)(process_representation_df, transition_log, method, data_feature)
             except Exception as e:
-                print("Error in data_feature representation: ", data_feature)
+                print("Error in data_feature representation: ", method, " and ", data_feature)
                 print("Error: ", e)
 
         # Merge all features transition matrices
         process_representation_df = reduce(lambda  left,right: pd.merge(left, right, on=['activity_from', 'activity_to'], how='outer'), process_features_dict.values()).fillna(0)
 
         # Keep only the defined features
-        self.process_representation_df = process_representation_df[list(self.control_flow_features) + list(self.time_features.keys()) + list(self.resource_features.keys()) + list(self.data_features.keys())]
+        self.process_representation_df = process_representation_df #[list(self.control_flow_features) + list(self.time_features.keys()) + list([f"{key}_{value}" for key, value in self.resource_features]) + list([f"{key}_{value}" for key, value in self.data_features])] 
 
 
     def get_process_representation(self) -> pd.DataFrame:

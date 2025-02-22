@@ -30,6 +30,17 @@ def get_delta_matrix_aggregation(delta_matrix, process_representation_reference_
     return delta_matrix[change_feature_params['process_feature']].agg(change_feature_params['agg_function'])
 
 
+def get_delta_matrix_multiple_aggregation(delta_matrix, process_representation_reference_window_df, process_representation_detection_window_df, change_feature_params):
+    # Filter columns that start with the specified prefix
+    columns_to_aggregate = delta_matrix.filter(like=change_feature_params['process_feature']).columns
+    
+    # Apply the horizontal aggregation
+    horizontal_agg = delta_matrix[columns_to_aggregate].apply(change_feature_params['agg_function'], axis=1)
+    
+    # Apply the vertical aggregation
+    return horizontal_agg.agg(change_feature_params['agg_function'])
+
+
 def get_delta_matrix_percentage(delta_matrix, process_representation_reference_window_df, process_representation_detection_window_df, change_feature_params):
     """Get the proportion of difference to maximum difference possible
     Args:
