@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 import scipy.stats as ss
 import gzip as gzip_lib
 from datetime import datetime, timedelta
+import pm4py
 
 def process_instance(el):
     """
@@ -153,3 +154,20 @@ def list_match_metrics(gt_list, pred_list):
     f1 = 2 * (precision * recall) / (precision + recall) if precision + recall > 0 else 0
     
     return precision, recall, f1
+
+
+def parse_xes(file):
+    """
+    Parse XES file and return a DataFrame.
+    Handles both compressed (.gz) and uncompressed XES files.
+
+    :param file: Path to the XES file.
+    :return: Parsed event log as a pandas DataFrame.
+    """
+    # Read the XES file
+    log = pm4py.read_xes(file)
+
+    # Convert the event log to a pandas DataFrame
+    df = pm4py.convert_to_dataframe(log)
+
+    return df

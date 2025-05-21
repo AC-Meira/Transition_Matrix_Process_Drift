@@ -22,7 +22,6 @@ from pm4py.algo.discovery.inductive import algorithm as inductive_miner
 from graphviz import Digraph
 from IPython.display import display, Image
 from openai import OpenAI
-from langchain_openai import ChatOpenAI
 import google.generativeai as genai
 
 
