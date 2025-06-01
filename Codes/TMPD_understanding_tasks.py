@@ -178,6 +178,40 @@ def create_dfg_from_dataset(dataset):
     # Removing transitions that involve 'START' and 'END'
     dfg_transitions = {k: v for k, v in dfg_transitions.items() if 'START' not in k and 'END' not in k}
 
+    # --- Add synthetic unknown activities for orphans ---
+    # Find all activities
+    all_activities = set()
+    for (from_act, to_act) in dfg_transitions:
+        all_activities.add(from_act)
+        all_activities.add(to_act)
+    # Remove synthetic nodes if present
+    all_activities.discard('unknown_previous_activities')
+    all_activities.discard('unknown_following_activities')
+
+    # Find activities with no incoming transitions (orphans at start)
+    incoming = {to_act for (_, to_act) in dfg_transitions}
+    start_orphans = all_activities - incoming - set(start_activities_freq.keys())
+    # Add synthetic incoming transitions for start orphans
+    unknown_prev_total = 0
+    for orphan in start_orphans:
+        freq = start_activities_freq.get(orphan, 1)
+        dfg_transitions[('unknown_previous_activities', orphan)] = freq
+        unknown_prev_total += freq
+    if unknown_prev_total > 0:
+        start_activities_freq['unknown_previous_activities'] = unknown_prev_total
+
+    # Find activities with no outgoing transitions (orphans at end)
+    outgoing = {from_act for (from_act, _) in dfg_transitions}
+    end_orphans = all_activities - outgoing - set(end_activities_freq.keys())
+    # Add synthetic outgoing transitions for end orphans
+    unknown_foll_total = 0
+    for orphan in end_orphans:
+        freq = end_activities_freq.get(orphan, 1)
+        dfg_transitions[(orphan, 'unknown_following_activities')] = freq
+        unknown_foll_total += freq
+    if unknown_foll_total > 0:
+        end_activities_freq['unknown_following_activities'] = unknown_foll_total
+
     return create_dfg_from_transitions(dfg_transitions, start_activities_freq, end_activities_freq)
 
 
@@ -200,39 +234,45 @@ def create_dfg_from_transitions(dfg_transitions, start_activities_freq, end_acti
 
 
 def compare_dfgs(dfg1, dfg2):
-    # Retrieve transition sets from the graphs
-    dfg1_transitions = set(dfg1.graph.keys())
-    dfg2_transitions = set(dfg2.graph.keys())
+    # Helper to check if a node is synthetic
+    def is_synthetic_node(node):
+        return node in {'unknown_previous_activities', 'unknown_following_activities'}
+
+    # Retrieve transition sets from the graphs, excluding synthetic transitions
+    dfg1_transitions = set((a, b) for (a, b) in dfg1.graph.keys() if not is_synthetic_node(a) and not is_synthetic_node(b))
+    dfg2_transitions = set((a, b) for (a, b) in dfg2.graph.keys() if not is_synthetic_node(a) and not is_synthetic_node(b))
+
+    # Include transitions to END and from START explicitly, but only for non-synthetic activities
+    dfg1_transitions |= set(('START', act) for act in dfg1.start_activities.keys() if not is_synthetic_node(act))
+    dfg2_transitions |= set(('START', act) for act in dfg2.start_activities.keys() if not is_synthetic_node(act))
+    dfg1_transitions |= set((act, 'END') for act in dfg1.end_activities.keys() if not is_synthetic_node(act))
+    dfg2_transitions |= set((act, 'END') for act in dfg2.end_activities.keys() if not is_synthetic_node(act))
 
     # Calculate new, deleted, and altered transitions
     new_transitions = dfg2_transitions - dfg1_transitions
     deleted_transitions = dfg1_transitions - dfg2_transitions
-    
-    # Get activities
-    dfg1_activities = set(t[0] for t in dfg1.graph.keys()) | set(t[1] for t in dfg1.graph.keys())
-    dfg2_activities = set(t[0] for t in dfg2.graph.keys()) | set(t[1] for t in dfg2.graph.keys())
 
-    # Calculate new and deleted activities
+    # Get activities, excluding synthetic
+    dfg1_activities = set(x for t in dfg1.graph.keys() for x in t if not is_synthetic_node(x))
+    dfg2_activities = set(x for t in dfg2.graph.keys() for x in t if not is_synthetic_node(x))
     new_activities = dfg2_activities - dfg1_activities
     deleted_activities = dfg1_activities - dfg2_activities
-    
-    # Get start and end activities
-    dfg1_start_activities = set(dfg1.start_activities.keys())
-    dfg2_start_activities = set(dfg2.start_activities.keys())
-    dfg1_end_activities = set(dfg1.end_activities.keys())
-    dfg2_end_activities = set(dfg2.end_activities.keys())
 
-    # Calculate new and deleted start and end activities
+    # Get start and end activities, excluding synthetic
+    dfg1_start_activities = set(a for a in dfg1.start_activities.keys() if not is_synthetic_node(a))
+    dfg2_start_activities = set(a for a in dfg2.start_activities.keys() if not is_synthetic_node(a))
+    dfg1_end_activities = set(a for a in dfg1.end_activities.keys() if not is_synthetic_node(a))
+    dfg2_end_activities = set(a for a in dfg2.end_activities.keys() if not is_synthetic_node(a))
     new_start_activities = dfg2_start_activities - dfg1_start_activities
     deleted_start_activities = dfg1_start_activities - dfg2_start_activities
     new_end_activities = dfg2_end_activities - dfg1_end_activities
     deleted_end_activities = dfg1_end_activities - dfg2_end_activities
 
     dfg_changes = {
-        'New transitions added to the process': list(new_transitions) if new_transitions else ["None"]
-        ,'Deleted transitions from the process': list(deleted_transitions) if deleted_transitions else ["None"]
-        ,'New activities added to the process': list(new_activities) if new_activities else ["None"]
-        ,'Deleted activities from the process': list(deleted_activities) if deleted_activities else ["None"]
+        'New transitions added to the process': list(new_transitions) if new_transitions else ["None"],
+        'Deleted transitions from the process': list(deleted_transitions) if deleted_transitions else ["None"],
+        'New activities added to the process': list(new_activities) if new_activities else ["None"],
+        'Deleted activities from the process': list(deleted_activities) if deleted_activities else ["None"],
         # ,'New start activities added to the process': list(new_start_activities) if new_start_activities else ["None"]
         # ,'Deleted start activities from the process': list(deleted_start_activities) if deleted_start_activities else ["None"]
         # ,'New end activities added to the process': list(new_end_activities) if new_end_activities else ["None"]
@@ -662,5 +702,4 @@ def llm_classification_formatting(characterization_classification):
         return ast.literal_eval(characterization_classification[start_index:end_index].strip())
     except:
         return "Classification not in the expected format."
-    
-    
+

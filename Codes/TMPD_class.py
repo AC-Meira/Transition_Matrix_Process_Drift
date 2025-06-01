@@ -75,9 +75,10 @@ class TMPD():
         self.event_log = event_log.copy()
         
 
-    def run_transition_log(self) -> None:
+    def run_transition_log(self, replace_spaces_in_activities: bool = True) -> None:
         """
         Computes a transition log from the event log and stores it in the object.
+        Optionally replaces spaces with underscores in activity columns.
         A transition log records transitions between activities in each case of an event log.
         The transition log has one row per transition and the following columns:
             - case_id: ID of the case the transition belongs to.
@@ -118,6 +119,10 @@ class TMPD():
             # Select the columns needed for the transition log and rename them
             event_log = event_log[[self.case_id, self.activity_key, self.timestamp_key] + self.other_columns_keys]
             event_log = event_log.rename(columns={self.case_id:'case_id', self.activity_key:'activity', self.timestamp_key:'timestamp'})
+
+            # Optionally replace spaces with underscores in activity column
+            if replace_spaces_in_activities:
+                event_log['activity'] = event_log['activity'].astype(str).str.replace(' ', '_')
 
             # Convert timestamp column to datetime format
             if self.timestamp_format == 'infer':
@@ -728,6 +733,12 @@ class TMPD():
 
         # Compare DFGs
         dfg_changes = TMPD_understanding_tasks.compare_dfgs(self.reference_dfg, self.detection_dfg)
+        new_transitions = set(dfg_changes.get('New transitions added to the process', []))
+        deleted_transitions = set(dfg_changes.get('Deleted transitions from the process', []))
+
+        # Filter out changed transitions that are also new or deleted
+        filtered_changed_transitions = self.changed_transitions[~self.changed_transitions['transition'].isin(new_transitions | deleted_transitions)]
+        self.changed_transitions = filtered_changed_transitions.reset_index(drop=True)
 
         # Converting changed transitions list to a dict
         changed_transitions_dict = {}
@@ -742,8 +753,7 @@ class TMPD():
             # Add the transitions to the dictionary with a modified key
             changed_transitions_dict["Transitions with variations in " + str(feature)] = transitions
 
-
-        # Combine changed transtions list with DFG changes
+        # Combine changed transitions list with DFG changes
         self.change_informations = changed_transitions_dict | dfg_changes
 
         # Covert DFG to process trees and get BPMN diagram text
@@ -808,8 +818,6 @@ class TMPD():
         print("################################ llm_bpmn_analysis_response #####################################")
         print(self.llm_bpmn_analysis_response)
 
-
-
         ### Classification prompt
         # Prepare the prompt
         self.llm_classification_prompt = TMPD_understanding_tasks.llm_classification_prompt(self.llm_instructions, self.change_informations, self.reference_bpmn_text, self.detection_bpmn_text, self.llm_bpmn_analysis_response) 
@@ -832,6 +840,7 @@ class TMPD():
 
         """
         return self.characterization_classification_dict, self.characterization_classification_response, self.llm_bpmn_analysis_response 
+    
 
     def set_explanation_task(self) -> None:
 
@@ -850,6 +859,6 @@ class TMPD():
         """
         
         """
-    
+
 
 

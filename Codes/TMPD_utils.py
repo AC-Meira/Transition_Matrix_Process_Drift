@@ -165,7 +165,7 @@ def parse_xes(file):
     :return: Parsed event log as a pandas DataFrame.
     """
     # Read the XES file
-    log = pm4py.read_xes(file)
+    log = pm4py.read_xes(file, return_legacy_log_object=True)
 
     # Convert the event log to a pandas DataFrame
     df = pm4py.convert_to_dataframe(log)
