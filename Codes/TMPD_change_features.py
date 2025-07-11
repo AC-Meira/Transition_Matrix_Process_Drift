@@ -11,26 +11,86 @@ import scipy.stats as ss
 import sys
 thismodule = sys.modules[__name__]
 
-def get_delta_matrix(process_representation_reference_window_df_original, process_representation_detection_window_df_original):
+def get_delta_matrix(process_representation_reference_window_df_original, process_representation_detection_window_df_original,
+                    control_flow_features=None, time_features=None, resource_features=None, data_features=None):
+    """
+    Computes the difference (Delta Matrix) between the process representation of the reference window and the detection window.
 
-    """Get the difference between the process representation reference window and the rocess representation detection window - Delta Matrix
     Args:
-        log_transition (DataFrame): Event log as Pandas Dataframe. 
+        process_representation_reference_window_df_original (DataFrame): Reference window process representation.
+        process_representation_detection_window_df_original (DataFrame): Detection window process representation.
+        control_flow_features (set): Set of control flow feature names.
+        time_features (set): Set of time feature names.
+        resource_features (set): Set of resource feature names.
+        data_features (set): Set of data feature names.
+
+    Returns:
+        DataFrame: Delta Matrix representing the absolute differences.
     """
 
     process_representation_reference_window_df = process_representation_reference_window_df_original.copy()
     process_representation_detection_window_df = process_representation_detection_window_df_original.copy()
 
-    delta_matrix = abs(process_representation_reference_window_df.subtract(process_representation_detection_window_df, fill_value=0))
+    # Control Flow Features: Fill missing transitions with 0
+    derived_control_flow_features_reference = [col for col in process_representation_reference_window_df.columns for feat in control_flow_features if col.startswith(feat)]
+    derived_control_flow_features_detection = [col for col in process_representation_detection_window_df.columns for feat in control_flow_features if col.startswith(feat)]
+    delta_matrix_control_flow = abs(process_representation_reference_window_df[derived_control_flow_features_reference].subtract(process_representation_detection_window_df[derived_control_flow_features_detection], fill_value=0))
+
+    # Time Features: Fill missing transitions with NaN
+    derived_time_features_reference = [col for col in process_representation_reference_window_df.columns for feat in time_features if col.startswith(feat)]
+    derived_time_features_detection = [col for col in process_representation_detection_window_df.columns for feat in time_features if col.startswith(feat)]
+    delta_matrix_time = abs(process_representation_reference_window_df[derived_time_features_reference].subtract(process_representation_detection_window_df[derived_time_features_detection], fill_value=0))
+
+    # Resource Features: Fill missing transitions with NaN
+    derived_resource_features_reference = [col for col in process_representation_reference_window_df.columns for feat in resource_features if col.startswith(feat)]
+    derived_resource_features_detection = [col for col in process_representation_detection_window_df.columns for feat in resource_features if col.startswith(feat)]
+    delta_matrix_resource = abs(process_representation_reference_window_df[derived_resource_features_reference].subtract(process_representation_detection_window_df[derived_resource_features_detection], fill_value=0))
+
+    # Data Features: Fill missing transitions with NaN
+    derived_data_features_reference = [col for col in process_representation_reference_window_df.columns for feat in data_features if col.startswith(feat)]
+    derived_data_features_detection = [col for col in process_representation_detection_window_df.columns for feat in data_features if col.startswith(feat)]
+    delta_matrix_data = abs(process_representation_reference_window_df[derived_data_features_reference].subtract(process_representation_detection_window_df[derived_data_features_detection], fill_value=0))
+
+    # Combine all delta matrices
+    delta_matrix = pd.concat([delta_matrix_control_flow, delta_matrix_time, delta_matrix_resource, delta_matrix_data], axis=1)
 
     return delta_matrix
 
 
 def get_delta_matrix_aggregation(delta_matrix, process_representation_reference_window_df, process_representation_detection_window_df, change_feature_params):
-    return delta_matrix[change_feature_params['process_feature']].agg(change_feature_params['agg_function'])
+    """
+    Aggregates the delta matrix values using the specified aggregation function.
+
+    Args:
+        delta_matrix (DataFrame): Delta Matrix.
+        process_representation_reference_window_df (DataFrame): Reference window process representation.
+        process_representation_detection_window_df (DataFrame): Detection window process representation.
+        change_feature_params (dict): Parameters for aggregation, including the feature and aggregation function.
+
+    Returns:
+        float: Aggregated value.
+    """
+    result = delta_matrix[change_feature_params['process_feature']].agg(change_feature_params['agg_function'])
+    if isinstance(result, pd.Series):
+        # If multiple columns, aggregate again to get a single value
+        result = result.agg(change_feature_params['agg_function'])
+    return result
 
 
 def get_delta_matrix_multiple_aggregation(delta_matrix, process_representation_reference_window_df, process_representation_detection_window_df, change_feature_params):
+    """
+    Performs multiple aggregations on the delta matrix: horizontal aggregation followed by vertical aggregation.
+
+    Args:
+        delta_matrix (DataFrame): Delta Matrix.
+        process_representation_reference_window_df (DataFrame): Reference window process representation.
+        process_representation_detection_window_df (DataFrame): Detection window process representation.
+        change_feature_params (dict): Parameters for aggregation, including the feature and aggregation function.
+
+    Returns:
+        float: Result of the multiple aggregations.
+    """
+
     # Filter columns that start with the specified prefix
     columns_to_aggregate = delta_matrix.filter(like=change_feature_params['process_feature']).columns
     
@@ -42,9 +102,17 @@ def get_delta_matrix_multiple_aggregation(delta_matrix, process_representation_r
 
 
 def get_delta_matrix_percentage(delta_matrix, process_representation_reference_window_df, process_representation_detection_window_df, change_feature_params):
-    """Get the proportion of difference to maximum difference possible
+    """
+    Get the proportion of difference to maximum difference possible
+
     Args:
-        log_transition (DataFrame): Event log as Pandas Dataframe. 
+        delta_matrix (DataFrame): Delta Matrix.
+        process_representation_reference_window_df (DataFrame): Reference window process representation.
+        process_representation_detection_window_df (DataFrame): Detection window process representation.
+        change_feature_params (dict): Parameters for percentage calculation, including the feature.
+
+    Returns:
+        float: Percentage of difference.
     """
 
     total_delta = process_representation_reference_window_df[change_feature_params['process_feature']].sum() + process_representation_detection_window_df[change_feature_params['process_feature']].sum()
@@ -53,38 +121,61 @@ def get_delta_matrix_percentage(delta_matrix, process_representation_reference_w
 
 
 def get_delta_matrix_aggregation_weight(delta_matrix, process_representation_reference_window_df, process_representation_detection_window_df, change_feature_params):
+    """
+    Aggregates the weighted delta matrix values using the specified aggregation function.
+
+    Args:
+        delta_matrix (DataFrame): Delta Matrix.
+        process_representation_reference_window_df (DataFrame): Reference window process representation.
+        process_representation_detection_window_df (DataFrame): Detection window process representation.
+        change_feature_params (dict): Parameters for aggregation, including the feature, weight feature, and aggregation function.
+
+    Returns:
+        float: Aggregated weighted value.
+    """
 
     return delta_matrix[change_feature_params['process_feature']].multiply(delta_matrix[change_feature_params['weight_feature']].values, axis="index", fill_value=0).agg(change_feature_params['agg_function'])
 
 
-def get_delta_matrix_strategy(process_representation_reference_window_df_original, process_representation_detection_window_df_original, change_feature_params_dict):
+def get_delta_matrix_strategy(process_representation_reference_window_df_original, process_representation_detection_window_df_original, change_feature_params_dict, control_flow_features=None, time_features=None, resource_features=None, data_features=None):
+    """
+    Computes the difference between the process representation of the reference window and the detection window using various strategies.
+    Passes feature sets to get_delta_matrix for correct fill logic.
 
-    """Get the difference between the rocess representation reference window and the rocess representation detection window - Delta Matrix
     Args:
-        log_transition (DataFrame): Event log as Pandas Dataframe. 
-        {
-                'frequency_delta' : {'process_feature':'frequency', 'method':'aggregation', 'agg_function' : 'sum'}
-                , 'probability_delta' : {'process_feature':'probability', 'method':'aggregation', 'agg_function' : 'sum'}
-                , 'frequency_delta_percentage' : {'process_feature':'frequency', 'method':'percentage'}
-                , 'prob_freq_delta' : {'process_feature':'probability', 'method':'aggregation_weight', 'agg_function' : 'sum', 'weight_feature' : 'frequency'}
-            }
+        process_representation_reference_window_df_original (DataFrame): Reference window process representation.
+        process_representation_detection_window_df_original (DataFrame): Detection window process representation.
+        change_feature_params_dict (dict): Dictionary containing the strategies for computing differences, including:
+            - 'frequency_delta' : {'process_feature':'frequency', 'method':'aggregation', 'agg_function' : 'sum'}
+            - 'probability_delta' : {'process_feature':'probability', 'method':'aggregation', 'agg_function' : 'sum'}
+            - 'frequency_delta_percentage' : {'process_feature':'frequency', 'method':'percentage'}
+            - 'prob_freq_delta' : {'process_feature':'probability', 'method':'aggregation_weight', 'agg_function' : 'sum', 'weight_feature' : 'frequency'}
+
+    Returns:
+        dict: Dictionary containing the computed differences for each strategy.
     """
 
     process_representation_reference_window_df = process_representation_reference_window_df_original.copy()
     process_representation_detection_window_df = process_representation_detection_window_df_original.copy()
 
-    # Call delta matrix function
-    delta_matrix = get_delta_matrix(process_representation_reference_window_df, process_representation_detection_window_df)
+    # Call delta matrix function with feature sets
+    delta_matrix = get_delta_matrix(process_representation_reference_window_df, process_representation_detection_window_df,
+                                    control_flow_features=control_flow_features,
+                                    time_features=time_features,
+                                    resource_features=resource_features,
+                                    data_features=data_features)
 
     # Loop to call the change features methods to aggregate all differences - Delta Vector
     change_features_delta_matrix_dict = {}
     for change_feature, change_feature_params in change_feature_params_dict.items():
 
         try:
-            change_features_delta_matrix_dict[change_feature] = getattr(thismodule, "get_delta_matrix_" + change_feature_params['method'])(delta_matrix
-                                                                                                                                    , process_representation_reference_window_df
-                                                                                                                                    , process_representation_detection_window_df
-                                                                                                                                    , change_feature_params)
+            change_features_delta_matrix_dict[change_feature] = getattr(thismodule, "get_delta_matrix_" + change_feature_params['method'])(
+                delta_matrix,
+                process_representation_reference_window_df,
+                process_representation_detection_window_df,
+                change_feature_params
+            )
 
         except Exception as e:
             print("Unknown change feature: ", change_feature)
@@ -256,7 +347,7 @@ def get_statistic_test_chi2_test(process_representation_reference_window_df_orig
     return ss.chi2_contingency(contingency_matrix, correction=True)[1]
 
 
-def get_statistic_test_strategy(process_representation_reference_window_df_original, process_representation_detection_window_df_original, change_feature_params_dict):
+def get_statistic_test_strategy(process_representation_reference_window_df_original, process_representation_detection_window_df_original, change_feature_params_dict, control_flow_features=None, time_features=None, resource_features=None, data_features=None):
 
     """...
     Args:
@@ -281,4 +372,4 @@ def get_statistic_test_strategy(process_representation_reference_window_df_origi
             print("Unknown change feature: ", change_feature)
             print("Error: ", e)
 
-    return change_features_statistic_test_dict 
+    return change_features_statistic_test_dict

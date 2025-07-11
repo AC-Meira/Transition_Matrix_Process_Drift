@@ -11,11 +11,15 @@ import datetime
 from scipy.stats import entropy
 
 def get_feature_probability(TM_df_original, control_flow_feature):
+    """
+    Computes the probability of transitions based on their frequency.
 
-    """...
     Args:
-        'frequency_gtest' : {'process_feature':'frequency', 'method':'g_test', 'contingency_matrix_sum_value' : '5', 'remove_zeros':'True'}
-        , 'frequency_cramersv' : {'process_feature':'frequency', 'method':'cramers_v', 'contingency_matrix_sum_value' : '5', 'remove_zeros':'True'}
+        TM_df_original (DataFrame): Transition matrix.
+        control_flow_feature (str): Name of the control flow feature to compute.
+
+    Returns:
+        DataFrame: Transition matrix with the computed probability feature.
     """
 
     TM_df = TM_df_original.copy()
@@ -31,11 +35,15 @@ def get_feature_probability(TM_df_original, control_flow_feature):
 
 
 def get_feature_causality(TM_df_original, control_flow_feature):
+    """
+    Identifies causal relationships between activities based on direct succession.
 
-    """...
     Args:
-        'frequency_gtest' : {'process_feature':'frequency', 'method':'g_test', 'contingency_matrix_sum_value' : '5', 'remove_zeros':'True'}
-        , 'frequency_cramersv' : {'process_feature':'frequency', 'method':'cramers_v', 'contingency_matrix_sum_value' : '5', 'remove_zeros':'True'}
+        TM_df_original (DataFrame): Transition matrix.
+        control_flow_feature (str): Name of the control flow feature to compute.
+
+    Returns:
+        DataFrame: Transition matrix with the computed causality feature.
     """
 
     TM_df = TM_df_original.copy()

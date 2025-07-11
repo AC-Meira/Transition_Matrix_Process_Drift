@@ -1,0 +1,289 @@
+# ------------------------------------------------------------------------------
+# GENERAL APPROACH INSTRUCTIONS
+# This YAML file contains the instructions for the general approach to the
+# characterization task. It includes the main instructions and the sources to be
+# included in the prompt.
+#
+# PROMPT ORDER: The final prompt will be constructed as:
+# 1. main_instructions (always first)
+# 2. sources (in the order listed below)
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# SOURCES CONFIGURATION
+# List the keys (information sources) you want to include in the LLM prompt.
+# - Predefined sources (from TMPD class) have fixed names and are always available.
+# - Custom sources (added to this YAML file) must match keys defined elsewhere in this file.
+# - The prompt will include the content of each selected key, in the order listed.
+# - You can add custom keys (e.g., business_rules, domain_knowledge, guidelines)
+#   and include them here to inject additional context or instructions.
+# - Supported value types: dict, list, string, or any YAML-supported structure.
+# - To exclude a source, simply remove it from the list or comment it out with #.
+#
+# Predefined sources (from TMPD class):
+
+#   - reference_window_df: Transition matrix BEFORE change with columns:
+#       * activity_from, activity_to: transition identifiers (always available)
+#       * frequency, percentual: control-flow metrics (always available)
+#       * Additional columns depend on user configuration (time, resource, data metrics)
+#       Use to show the process structure and metrics before the drift/change.
+#   - detection_window_df: Transition matrix AFTER change with same structure as reference_window_df.
+#       Use to show the process structure and metrics after the drift/change.
+#   - changed_transitions: Comprehensive statistical analysis with columns:
+#       * transition: (activity_from, activity_to) pairs
+#       * feature: specific metric that changed (varies based on user configuration)
+#       * perspective: control_flow (always), time, resource, data (if configured)
+#       * transition_status: new, deleted, significant difference
+#       * activity_status: new, deleted, no change
+#       * p_value, effect_size: statistical significance and magnitude
+#       * ref_value, det_value, dif_value: before, after, and difference values
+#       Use for detailed evidence of what changed across available perspectives.
+#   - change_informations: High-level summary of new/deleted activities and transitions.
+#       Use for a quick overview of structural changes.
+#   - reference_bpmn_text: BPMN structure (process model) before the change.
+#       Use for control-flow structure and operators before the change. Note: This is a process model that may have limitations.
+#   - detection_bpmn_text: BPMN structure (process model) after the change.
+#       Use for control-flow structure and operators after the change. Note: This is a process model that may have limitations.
+#   - controlflow_change_patterns: Known control-flow change patterns (dict of pattern descriptions).
+#       Use to help the LLM recognize and classify change patterns.
+#
+# - You can add any other key from this YAML file to include custom information.
+# ------------------------------------------------------------------------------
+sources:
+  - reference_window_df
+  - detection_window_df
+  - changed_transitions
+  - change_informations
+  - reference_bpmn_text
+  - detection_bpmn_text
+  - controlflow_change_patterns
+  # Add any other keys from this YAML file here to include them in the prompt
+
+# ------------------------------------------------------------------------------
+# MAIN INSTRUCTIONS
+# This is the core instruction text that is ALWAYS included in the LLM prompt.
+# It provides the framework, analysis guidelines, and output structure for the
+# characterization task. This section defines how the LLM should analyze the
+# provided information sources and structure its response.
+# ------------------------------------------------------------------------------
+main_instructions: |
+  ### Role and Goal ###
+  You are an expert process mining analyst specializing in concept drift characterization. Your objective is to deeply understand and explain the transformation observed between two versions of a business process. This includes identifying what changed, how the changes are interconnected, and what broader patterns and impacts they suggest — always grounded in the provided data sources.
+
+  **Your analysis must go beyond simply listing differences.** The user has access to the raw data and statistical tables. Your job is to interpret this information holistically, identify key insights, and present a coherent narrative that explains the *nature*, *scope*, and *interconnectedness* of the changes.
+
+  ### Input Data ###
+    - reference_window_df: Transition matrix BEFORE change with columns:
+        * activity_from, activity_to: transition identifiers (always available)
+        * frequency, percentual: control-flow metrics (always available)
+        * Additional columns depend on user configuration (time, resource, data metrics)
+        Use to show the process structure and metrics before the drift/change.
+    - detection_window_df: Transition matrix AFTER change with same structure as reference_window_df.
+        Use to show the process structure and metrics after the drift/change.
+    - changed_transitions: Comprehensive statistical analysis with columns:
+        * transition: (activity_from, activity_to) pairs
+        * feature: specific metric that changed (varies based on user configuration)
+        * perspective: control_flow (always), time, resource, data (if configured)
+        * transition_status: new, deleted, significant difference
+        * activity_status: new, deleted, no change
+        * p_value, effect_size: statistical significance and magnitude
+        * ref_value, det_value, dif_value: before, after, and difference values
+        Use for detailed evidence of what changed across available perspectives.
+    - controlflow_change_patterns: Known control-flow change patterns (dict of pattern descriptions).
+        Use to help the LLM recognize and classify change patterns.
+
+  ### Output Structure ###
+  Your response must follow this structure, aiming for clarity, insight, and comprehensiveness:
+
+  **1. Executive Summary**
+  - Succinct overview of the most relevant transformations observed.
+  - Emphasize structural, organizational, or behavioral shifts.
+  - Mention whether the changes are mostly localized or global in scope.
+  - Highlight key cross-perspective effects when possible.
+
+  **2. Integrated Change Characterization**
+  Analyze and **interpret** the changes observed across all available perspectives. Focus on *meaningful* changes, and use grouping and summarization to avoid unnecessary detail. 
+
+  - **Control-Flow Evolution**
+    - Describe how the overall structure of the process evolved (e.g., new paths, restructured sequences, branching changes).
+    - Explain movement or replacement of activities and transitions, using frequency and percentual changes to support observations.
+    - Group changes when possible: e.g., "A set of parallel paths was restructured to a sequential flow."
+    - Example: "**Introduction of a new review step**: A new review step was introduced between task submission and final approval, shifting the process from a two-step to a three-step validation. The path from "Submitted" to "Approved" was replaced by a sequence of "Submitted", "Reviewed", and then "Approved", indicating a tighter quality control phase."
+
+  - **Time Perspective**
+    - Explain how timing changed: delays, accelerations, spread in durations.
+    - Focus on systemic trends rather than isolated shifts.
+    - Use statistical evidence to validate observations (e.g., large effect size, p < 0.05).
+    - Example: "**Decrease in processing time**: The average duration between "Task Initiated" and "Task Completed" decreased from 6.2 to 3.9 days, suggesting improved efficiency in execution. At the same time, variance increased in some branches, indicating inconsistent processing in specific paths."
+
+  - **Resource Perspective**
+    - Highlight any shifts in responsibility or role allocations.
+    - Describe how the involvement of teams or individuals changed and what that implies organizationally.
+    - Group transitions by the type or direction of role changes when possible.
+    - Example: "**Redistribution of approval responsibilities**: Approval responsibilities previously held by the “Coordinator” role were redistributed to “Supervisor” and “Manager”, reflecting a shift in decision-making authority. Transitions involving the “Coordinator” disappeared, while those involving the new roles gained frequency and probability."
+
+  - **Data Perspective**
+    - Interpret changes in numerical or categorical data behavior.
+    - Focus on meaningful shifts that could indicate logic or data flow transformation.
+    - Prioritize changes that affect conditional logic or indicate broader process adaptation.
+    - Example: "**Increase in variability**: The standard deviation of the “Cost” attribute increased from 45.2 to 76.4 in several transitions, suggesting greater variability in transaction amounts. This could point to relaxed validation criteria or broader applicability of the process path."
+
+  - **Cross-Perspective Insights**
+    - Draw connections between perspectives. For example: “The addition of a new decision point (control-flow) corresponds with a shift in resource responsibility and a significant change in average processing time.”
+    - Highlight replacements, cascading changes, or cross-perspective transformation patterns.
+    - Example: "**Introduction of a new decision point**: The introduction of a new decision point in the control-flow was accompanied by longer processing times and a change in responsible roles, indicating that the added complexity might be affecting both efficiency and ownership across the process."
+
+  **3. Control-Flow Pattern Recognition**
+  - Identify and **name** any known control-flow change patterns observed (from the provided list).
+  - Justify pattern matches with evidence, but avoid rigid listing. Integrate it into the narrative (e.g., “This sequence restructuring matches a Serial-Move pattern.”).
+  - Mention any combinations or novel structural motifs not covered by existing patterns.
+  - Use only control-flow perspective features to identify the pattern.
+
+  **4. Scope and Magnitude**
+  - Describe the *extent* and *practical relevance* of the observed changes.
+  - Focus on how centralized, localized, or widespread the changes were.
+  - Summarize how impactful the changes are to the behavior of the process.
+
+  ### Writing and Reasoning Guidelines ###
+  - Be analytical, not descriptive. Focus on understanding and synthesis.
+  - Use objective, precise language. Avoid recommendations or subjective judgments.
+  - Structure your response for readability: emphasize main transformations and link insights clearly.
+  - Use technical terminology appropriately.
+  - Prefer summarization and connection over enumeration. Be insightful and selective.
+
+  ### Final Note ###
+  This is a **story of transformation** — a contextual, multi-perspective narrative of how the process evolved, grounded in factual data and aimed at actionable understanding.
+
+
+# ------------------------------------------------------------------------------
+# CONTROL-FLOW CHANGE PATTERNS (Custom Source)
+# This section contains the instructions for the control-flow change patterns.
+# It includes the instructions for each pattern and the evidence to be used to
+# identify the pattern.
+# ------------------------------------------------------------------------------
+controlflow_change_patterns:
+    - sre_instructions: | 
+        Serial-Switch:
+         - If the new activity is added in a Sequence fragment between two existing activities or the deleted activity was in a Sequence fragment between two existing activities then is Serial-Switch pattern. 
+         - For example, the BPMN diagram could change from 'Sequence(A, B)' to 'Sequence(A, C, B)' or vice versa, where C is the activity involved.
+         - Evidence:
+             - New or deleted activity in a Sequence fragment in BPMN diagram comparison.
+             - New or deleted activity in the list of variations.
+    
+    - pre_instructions: |
+        Parallel-Switch:
+         - If the new activity is added in a Parallel fragment or the deleted activity was in a Parallel fragment then is Parallel-Switch pattern.
+         - For example, the BPMN diagram could change from 'Sequence(A, B, C)' to 'Sequence(A, Parallel(B, D), C)' or vice versa, where D is the activity involved.
+         - Evidence:
+             - New or deleted activity in a Parallel fragment in BPMN diagram comparison.
+             - New or deleted activity in the list of variations.
+    
+    - cre_instructions: |
+        Conditional-Switch:
+         - If the new activity is added in a conditional fragment or the deleted activity was in a conditional fragment then is Conditional-Switch pattern. 
+         - For example, the BPMN diagram could change from 'Sequence(A, B, C)' to 'Sequence(A, Conditional(B, D), C)' or vice versa, where D is the activity involved.
+         - Evidence:
+             - New or deleted activity in a Conditional fragment in BPMN diagram comparison.
+             - New or deleted activities in the list of variations.
+    
+    - rp_instructions: | 
+        Replace:
+         - If the new activity is in the exactly place as the deleted then is Replace pattern. 
+         - For example, the BPMN diagram could change from 'Sequence(A, B, C)' to 'Sequence(A, D, C)', where B and D are the activities involved.
+         - Evidence:
+             - Activities replaced in the BPMN diagram comparison.
+             - Both new and deleted activities in any fragment in BPMN diagram comparison.
+             - Both new and deleted activities in the list of variations.
+
+    - sm_instructions: |
+        Serial-Move:
+         - If an activity has moved globally in the BPMN diagram into a Sequence fragment between two existing activities then is Serial-Move pattern.
+         - For example, the BPMN diagram could change from 'Sequence(A, B, C, D, E)' to 'Sequence(A, C, D, B, E)', where B is the activity involved.
+         - Evidence:
+             - New or deleted Sequence fragment in BPMN diagram comparison.
+             - Activity moved globally to or from a Sequence fragment in BPMN diagram comparison.
+             - Both new and deleted transitions in the list of variations involving the moved activity.
+             
+    
+    - pm_instructions: |
+        Parallel-Move:
+         - If an activity has moved globally in the BPMN diagram into a Parallel fragment then is Parallel-Move pattern. 
+         - For example, the BPMN diagram could change from 'Sequence(A, B, C, D, E, F)' to 'Sequence(A, C, D, Parallel(B, E), F)', where B were moved ahead in the diagram an inserted in a new Parallel fragment with activity E.
+         - Evidence:
+             - New or deleted Parallel fragment in BPMN diagram comparison.
+             - Activity moved globally to or from a Parallel fragment in BPMN diagram comparison.
+             - Both new and deleted transitions in the list of variations involving the moved activity.
+    
+    - cm_instructions: |
+        Conditional-Move:
+         - If an activity has moved globally in the BPMN diagram into a Conditional fragment then is Conditional-Move pattern.
+         - For example, the BPMN diagram could change from 'Sequence(A, B, C, D, E, F)' to 'Sequence(A, C, D, Conditional(B, E), F)', where B were moved ahead in the diagram an inserted in a new Conditional fragment with activity E.
+         - Evidence:
+             - New or deleted Conditional fragment in BPMN diagram comparison.
+             - Activity moved globally to or from a Conditional fragment in BPMN diagram comparison.
+             - Both new and deleted transitions in the list of variations involving the moved activity.
+    
+    - sw_instructions: |
+        Swap:
+         - If two activities or two combinations of activities were swapped in the BPMN diagram then is Swap pattern.
+         - For example:
+            - The BPMN diagram could change from 'Sequence(A, B, C, D, E, F, G, H)' to 'Sequence(A, G, D, E, F, B, C, H)', where activities B and C were moved to the exact position of G, and G were moved to the exact position of B and C.
+            - The BPMN diagram could change from 'Sequence(A, Parallel(B, C), D)' to 'Sequence(Parallel(B, C), A, D)', where activities A were moved to the exact position of the Parallel fragment Parallel(B, C) and Parallel(B, C) were moved to the exact position of A.
+         - Evidence:
+             - Activities swapped in BPMN diagram comparison.
+             - Activities moved in the BPMN diagram comparison.
+             - Both new and deleted transitions in the list of variations involving the swapped activities.
+
+    - pl_instructions: |
+        Parallel-To-Sequence:
+         - If two connected activities moved from a Sequence to a Parallel fragment or from a Parallel to Sequence then is Parallel-To-Sequence pattern. 
+         - For example, the BPMN diagram could change from 'Sequence(A, B, C, D)' to 'Sequence(A, Parallel(B, C), D)' or vice versa, where B and C were just inserted in a new Parallel fragment.
+         - Evidence:
+             - New or deleted Parallel fragment in BPMN diagram comparison.
+             - Activity moved locally to or from a Parallel fragment in BPMN diagram comparison.
+             - New (and sometimes deleted) transitions in the list of variations involving the activities included to or excluded from the Parallel fragment.
+    
+    - cf_instructions: |
+        Conditional-To-Sequence:
+         - If two connected activities moved from a Sequence to a Conditional fragment or from a Conditional to Sequence then is a Conditional-To-Sequence pattern.
+         - For example, the BPMN diagram could change from 'Sequence(A, B, C, D)' to 'Sequence(A, Conditional(B, C), D)' or vice versa, where B and C were just inserted in a new Conditional fragment.
+         - Evidence:
+             - New or deleted Conditional fragment in BPMN diagram comparison.
+             - Activity moved locally to or from a Conditional fragment in BPMN diagram comparison.
+             - New (and sometimes deleted) transitions in the list of variations involving the activities included to or excluded from the Conditional fragment.
+
+    - cd_instructions: |
+        Control-Dependancy:
+         - If a Parallel fragment is restructured, involving a reordered sequence of activities,then is Control-Dependancy pattern. 
+         - For example, the BPMN diagram could change from 'Sequence(A, Parallel(B, Sequence(C, D)), E)' to 'Sequence(A, Sequence(Parallel(B, C), D), E)' or vice versa, where B, C, and D are the activities involved.
+         - Evidence:
+             - Parallel fragment is restructured in BPMN diagram comparison, involving a reordered sequence of activities, or it could be represented as a new Parallel fragment.
+             - Activities were in a Parallel fragment and now they are sequence within this Parallel fragment or one of them is outside the fragment but the right next activity.
+             - New and deleted transitions in the list of variations involving the activities involved in the restructured fragment.
+             - Involved activities moved locally inside the Parallel fragment or globally outside the Parallel fragment but nearby the Parallel fragment.
+
+    - cb_instructions: |
+        Skip:
+         - If a new transition is making any non-skippable activity become now skippable or making any skippable activity become now non-skippable then is Skip pattern. 
+         - For example, the BPMN diagram could change from 'Sequence(A, B, C)' to 'Sequence(A, Conditional(B, 'tau'), C)' or vice versa, where B is the activity involved.
+         - Evidence:
+             - New or deleted transitions in the list of variations involving activities that isn't right next to the other in BPMN diagram.
+             - May be a new or deleted conditional fragment in BPMN diagram comparison with a silent transition ('tau'). Sometimes the silent transitions ('tau') will not be detect correctly, so rely on the new or deleted transitions in the list of variations.
+             - Involved activities moved locally.
+    
+    - lp_instructions: |
+        Loop:
+         - If there is new or deleted loop fragment where the relational dynamics among the activities involved remain fundamentally unchanged, except for the alteration in their loopability then is Loop pattern. 
+         - For example, the BPMN diagram could change from 'Sequence(A, B, C, D, E)' to 'Sequence(A, Loop(B, C, D), E)' or vice versa or vice versa, where B, C, and D are the activities involved.
+         - Evidence:
+             - New or deleted Loop fragment in BPMN diagram comparison.
+             - New and deleted transitions in the list of variations involving the activities in the new or deleted loop.
+             - Involved activities moved locally to or from a Loop fragment in BPMN diagram comparison.
+             - The structure inside the new or deleted loop remain fundamentally unchanged in the detection window compared with the reference window.
+
+    - fr_instructions: | 
+        Frequency:
+         - If there are transitions with variances without control-flow changes, then is Frequency pattern. 
+
+
+

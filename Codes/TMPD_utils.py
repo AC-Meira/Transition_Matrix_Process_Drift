@@ -15,8 +15,13 @@ import pm4py
 
 def process_instance(el):
     """
-        Process each 'process instance' element from the .mxml file
-        and returns as dict
+    Processes each 'process instance' element from the .mxml file and returns it as a dictionary.
+
+    Args:
+        el (Element): XML element representing a process instance.
+
+    Returns:
+        list: List of dictionaries representing the process instance.
     """
     resp = []
     for entry in el[1:]:
@@ -33,7 +38,13 @@ def process_instance(el):
 
 def read_mxml(file):
     """
-        Read MXML file into a Pandas DataFrame
+    Reads an MXML file and converts it into a Pandas DataFrame.
+
+    Args:
+        file (str): Path to the MXML file.
+
+    Returns:
+        DataFrame: Event log data extracted from the MXML file.
     """
     root = ET.parse(file).getroot()
     process = root[-1]

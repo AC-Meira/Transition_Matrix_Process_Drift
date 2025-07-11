@@ -1,8 +1,75 @@
-instructions_bpmn_analysis: |
+# ------------------------------------------------------------------------------
+# GENERAL APPROACH INSTRUCTIONS
+# This YAML file contains the instructions for the general approach to the
+# characterization task. It includes the main instructions and the sources to be
+# included in the prompt.
+#
+# PROMPT ORDER: The final prompt will be constructed as:
+# 1. main_instructions (always first)
+# 2. sources (in the order listed below)
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# SOURCES CONFIGURATION
+# List the keys (information sources) you want to include in the LLM prompt.
+# - Predefined sources (from TMPD class) have fixed names and are always available.
+# - Custom sources (added to this YAML file) must match keys defined elsewhere in this file.
+# - The prompt will include the content of each selected key, in the order listed.
+# - You can add custom keys (e.g., business_rules, domain_knowledge, guidelines)
+#   and include them here to inject additional context or instructions.
+# - Supported value types: dict, list, string, or any YAML-supported structure.
+# - To exclude a source, simply remove it from the list or comment it out with #.
+#
+# Predefined sources (from TMPD class):
+
+#   - reference_window_df: Transition matrix BEFORE change with columns:
+#       * activity_from, activity_to: transition identifiers (always available)
+#       * frequency, percentual: control-flow metrics (always available)
+#       * Additional columns depend on user configuration (time, resource, data metrics)
+#       Use to show the process structure and metrics before the drift/change.
+#   - detection_window_df: Transition matrix AFTER change with same structure as reference_window_df.
+#       Use to show the process structure and metrics after the drift/change.
+#   - changed_transitions: Comprehensive statistical analysis with columns:
+#       * transition: (activity_from, activity_to) pairs
+#       * feature: specific metric that changed (varies based on user configuration)
+#       * perspective: control_flow (always), time, resource, data (if configured)
+#       * transition_status: new, deleted, significant difference
+#       * activity_status: new, deleted, no change
+#       * p_value, effect_size: statistical significance and magnitude
+#       * ref_value, det_value, dif_value: before, after, and difference values
+#       Use for detailed evidence of what changed across available perspectives.
+#   - change_informations: High-level summary of new/deleted activities and transitions.
+#       Use for a quick overview of structural changes.
+#   - reference_bpmn_text: BPMN structure (process model) before the change.
+#       Use for control-flow structure and operators before the change. Note: This is a process model that may have limitations.
+#   - detection_bpmn_text: BPMN structure (process model) after the change.
+#       Use for control-flow structure and operators after the change. Note: This is a process model that may have limitations.
+#   - controlflow_change_patterns: Known control-flow change patterns (dict of pattern descriptions).
+#       Use to help the LLM recognize and classify change patterns.
+#
+# - You can add any other key from this YAML file to include custom information.
+# ------------------------------------------------------------------------------
+sources:
+#   - reference_window_df
+#   - detection_window_df
+  - reference_bpmn_text
+  - detection_bpmn_text
+#   - changed_transitions
+  - change_informations
+  - controlflow_change_patterns
+  # Add any other keys from this YAML file here to include them in the prompt
+
+# ------------------------------------------------------------------------------
+# MAIN INSTRUCTIONS
+# This is the core instruction text that is ALWAYS included in the LLM prompt.
+# It provides the framework, analysis guidelines, and output structure for the
+# characterization task. This section defines how the LLM should analyze the
+# provided information sources and structure its response.
+# ------------------------------------------------------------------------------
+main_instructions: |
     ### Introduction ###
     You are a technical analyst specializing in concept drift in process mining. 
     Your primary role is to investigate the phenomenon of concept drift by comparing two distinct phases of a business process: the reference window (before the change) and the detection window (after the change).
-
 
     ### BPMN Diagrams Comparison ###
     You will be provided with detailed BPMN diagrams for both time frame (reference and detection windows).
@@ -158,26 +225,27 @@ instructions_bpmn_analysis: |
                     - No silent transition ('tau') was added or removed.
                 - Other changes: 
                     - No other changes were made.
-        
 
-instructions_classification: |
-    ### Introduction ###
-    You are a technical analyst specializing in concept drift in process mining. 
-    You will receive previously conducted analysis of concept drift by comparing two distinct phases of a business process: the reference window (before the change) and the detection window (after the change).
-
-    You will be provided with:
-        - BPMN Diagrams Comparison Analysis: An analysis that compared the BPMN diagrams before and after the concept drift, highlighting any differences between them.
+    ### Change Pattern Analysis ###
+    After conducting the BPMN diagrams comparison analysis, you will also be provided with:
         - Transition and Activities Changes List: Lists showing all activities and transitions changes between the reference and detection windows.
         - Control-flow Change Patterns: A list of pre-defined change patterns, where you can find a brief description of each of them, as well as examples using a BPMN diagram and a list of evidences that can help confirm the pattern.
 
+    Combining all information analyzed, match them with the list of pre-defined change patterns, showing the evidence of the change pattern in the analysis.
+    Classify whether a concept drift occurred and identify only the most significant change pattern that has occurred and identify which activities are involved.
+    Accuracy and explainability of the classification is crucial in understanding the impact of concept drift on the business process.
 
-    ### Change characterization analysis ###
-    1. Carefully explain and correlate all the findings across the previous analysis in a holistic vision. 
-    2. Explain whether a concept drift occurred and try to match the changes with the list of pre-defined change patterns, showing the evidence of the change pattern in the analysis.
+    ### Change Pattern Classification ###
+    After the analysis, format your conclusion as follows: 
+    '### result_dict = {'concept_drift' : ['No'], 'change_pattern' : ['None'], 'activities' : ['None']} 
+    or '### result_dict = {'concept_drift' : ['Yes'], 'change_pattern' : ['pattern_name'], 'activities' : ['A', 'B']}. 
 
-    Accuracy and explainability of the characterization is crucial in understanding the impact of concept drift on the business process.
-
-
+# ------------------------------------------------------------------------------
+# CONTROL-FLOW CHANGE PATTERNS (Custom Source)
+# This section contains the instructions for the control-flow change patterns.
+# It includes the instructions for each pattern and the evidence to be used to
+# identify the pattern.
+# ------------------------------------------------------------------------------
 controlflow_change_patterns:
     - sre_instructions: | 
         Serial-Switch:

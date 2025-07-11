@@ -34,11 +34,15 @@ def dingOptimalNumberOfPoints(algo):
 
 
 def get_cpd_pelt(self, change_representation_df, detection_feature_params):
+    """
+    Applies the PELT algorithm for change point detection on the specified feature.
 
-    """...
     Args:
-        'frequency_gtest' : {'process_feature':'frequency', 'method':'g_test', 'contingency_matrix_sum_value' : '5', 'remove_zeros':'True'}
-        , 'frequency_cramersv' : {'process_feature':'frequency', 'method':'cramers_v', 'contingency_matrix_sum_value' : '5', 'remove_zeros':'True'}
+        change_representation_df (DataFrame): Change representation data.
+        detection_feature_params (dict): Parameters for the PELT algorithm, including model, cost, and smoothing.
+
+    Returns:
+        list: Detected change points.
     """
 
     # Get the defined change feature(s) vector and apply a 'smoothing'
@@ -70,7 +74,7 @@ def get_cpd_pelt(self, change_representation_df, detection_feature_params):
 
     # predict pelt algorithm 
     try: 
-        pen = detection_feature_params['pen']
+        pen = float(detection_feature_params['pen'])
         try: result = pelt_algo.predict(pen=pen)
         except Exception as e:
             print("Error in get_cpd_pelt: ", e)
@@ -88,22 +92,14 @@ def get_cpd_pelt(self, change_representation_df, detection_feature_params):
 
 
 def get_time_series_strategy(self, detection_task_params_dict):
+    """
+    Executes time series-based detection strategies.
 
-    """...
     Args:
-        detection_task_strategy_dict = {
-            'time_series_strategy': 
-            {
-                'cpd_frequency_delta' : {'change_features':['frequency_delta'], 'method':'cpd_pelt', 'model' : 'rbf', 'cost' : 'rpt.costs.CostRbf()', 'min_size' : '1', 'jump' : '1', 'smooth' : '3'}
-                , 'cpd_prob_freq_delta' : {'change_features':['prob_freq_delta_weight'], 'method':'cpd_pelt', 'model' : 'rbf', 'cost' : 'rpt.costs.CostRbf()', 'min_size' : '1', 'jump' : '1', 'smooth' : '3'}
-            }
-            , 'threshold_strategy' : 
-            {
-                'gtest_frequency' : {'change_features':['frequency_gtest_pvalue'], 'method':'comparison_operator', 'operator' : 'le', 'threshold_value' : '0.025', 'smooth' : '3'}
-                , 'fixed_frequency_delta_percentage' : {'change_features':['frequency_delta_percentage'], 'method':'comparison_operator', 'operator' : 'ge', 'threshold_value' : '0.05', 'smooth' : '3'}
-            }
-        }
+        detection_task_params_dict (dict): Dictionary of detection strategies and their parameters.
 
+    Returns:
+        dict: Results of the detection strategies.
     """
 
     change_representation_df = self.change_representation_df.copy()
@@ -184,4 +180,4 @@ def get_threshold_strategy(self, detection_task_params_dict):
             print("Error in get_threshold_strategy: ", detection_feature)
             print("Error: ", e)
 
-    return detection_strategy_result_dict 
+    return detection_strategy_result_dict

@@ -27,24 +27,50 @@ import google.generativeai as genai
 
 
 # Helper function to identify the type of variable
-def identify_statistical_test(series):
+def identify_statistical_test(series, feature_name=None):
     """
-    Identify the type of variable based on its values.
-    - 'proportion' if values are between 0 and 1.
-    - 'continuous' otherwise.
+    Determines the type of statistical test to apply based on the values in the series or feature name.
     """
+    # If all values are between 0 and 1, it's a proportion
     if np.all((series >= 0) & (series <= 1)):
         return 'proportion_test'
-    return 'count_test'
+    # If all values are integers, it's a count
+    if np.all(np.equal(np.mod(series, 1), 0)):
+        return 'count_test'
+    # Otherwise, treat as mean_test
+    return 'mean_test'
 
 
 # Calculate Cohen's h effect size for proportions.
 def cohen_h(p1, p2):
+    """
+    Calculates Cohen's h effect size for proportions.
+
+    Args:
+        p1 (float): Proportion 1.
+        p2 (float): Proportion 2.
+
+    Returns:
+        float: Cohen's h effect size.
+    """
     return 2 * (np.arcsin(np.sqrt(p1)) - np.arcsin(np.sqrt(p2)))
 
 
 # Calculate Cramers V statistic for categorical-categorical association
 def cramers_corrected_stat(data, ref_column, det_column, ref_value, det_value):
+    """
+    Calculate Cramér's V statistic for categorical-categorical association with correction for continuity.
+
+    Args:
+        data (DataFrame): The data containing the variables.
+        ref_column (str): The reference column name.
+        det_column (str): The detection column name.
+        ref_value (int): The reference value (count) for the event.
+        det_value (int): The detection value (count) for the event.
+
+    Returns:
+        float: Cramér's V statistic.
+    """
     # Calculate total counts for ref and det
     total_ref = data[ref_column].sum() - ref_value
     total_det = data[det_column].sum() - det_value
@@ -65,6 +91,18 @@ def cramers_corrected_stat(data, ref_column, det_column, ref_value, det_value):
 
 # Function to perform count test (Chi-squared or Fisher's exact test)
 def perform_count_test(merged_windows, row, variable_ref, variable_det):
+    """
+    Perform a count statistical test (Chi-squared or Fisher's exact test) on the given data.
+
+    Args:
+        merged_windows (DataFrame): The merged windows data.
+        row (Series): The specific row of data to test.
+        variable_ref (str): The reference variable (column) name.
+        variable_det (str): The detection variable (column) name.
+
+    Returns:
+        float: The p-value of the statistical test.
+    """
     freq_reference = row[variable_ref]
     freq_detection = row[variable_det]
     total_freq_reference = merged_windows[variable_ref].sum() - freq_reference
@@ -80,6 +118,20 @@ def perform_count_test(merged_windows, row, variable_ref, variable_det):
 
 # Adjusted function with pseudo-count (also known as Laplace smoothing) for handling zero frequencies
 def perform_proportions_test(merged_windows, row, transition, variable_ref, variable_det, pseudo_count):
+    """
+    Perform a proportions statistical test with pseudo-count adjustment for zero frequencies.
+
+    Args:
+        merged_windows (DataFrame): The merged windows data.
+        row (Series): The specific row of data to test.
+        transition (tuple): The transition (from, to) for the activity.
+        variable_ref (str): The reference variable (column) name.
+        variable_det (str): The detection variable (column) name.
+        pseudo_count (int): The pseudo-count to add for smoothing.
+
+    Returns:
+        float: The p-value of the statistical test.
+    """
     prob_reference = row[variable_ref]
     prob_detection = row[variable_det]
 
@@ -104,66 +156,243 @@ def perform_proportions_test(merged_windows, row, transition, variable_ref, vari
     # Perform the proportions Z-test
     stat, p_value = proportions_ztest(count, nobs)
 
-    # # Add pseudo-count
-    # success_reference = int(round(prob_reference * (total_count_reference + pseudo_count)))
-    # success_detection = int(round(prob_detection * (total_count_detection + pseudo_count)))
-
-    # # Calculate standard deviation
-    # std = np.sqrt((prob_reference * (1 - prob_reference) / (total_count_reference + pseudo_count)) +
-    #               (prob_detection * (1 - prob_detection) / (total_count_detection + pseudo_count)))
-
-    # # Avoid divide by zero
-    # if std == 0:
-    #     return 1
-
-    # # Perform the test
-    # stat, p_value = proportions_ztest([success_reference, success_detection], 
-    #                                   [total_count_reference + pseudo_count, total_count_detection + pseudo_count])
-    
     return p_value
 
 
-def changed_transitions_detection(self, merged_windows_df, features_windows):
+def t_test_from_summary_stats(mean1, mean2, std1, std2, n1, n2, epsilon=1e-8):
+    """
+    Perform Welch's t-test using summary statistics (mean, std, n) for each group.
+    
+    This is useful when we only have aggregated values per group (like per transition),
+    and not raw sample arrays, so scipy's ttest_ind cannot be used directly.
+    
+    Args:
+        mean1 (float): Mean of group 1 (reference).
+        mean2 (float): Mean of group 2 (detection).
+        std1 (float): Standard deviation of group 1.
+        std2 (float): Standard deviation of group 2.
+        n1 (float): Sample size (or weight/frequency) of group 1.
+        n2 (float): Sample size (or weight/frequency) of group 2.
+        epsilon (float): Small value to avoid division by zero.
 
-    # Initialize a dictionary to store the results
-    changed_transitions = pd.DataFrame(columns=['transition', 'feature', 'p_value', 'effect_size', 'ref_value', 'det_value', 'dif_value'])
+    Returns:
+        float: Two-tailed p-value of the Welch's t-test.
+    """
+    # Standard error
+    se = np.sqrt((std1**2 / (n1 + epsilon)) + (std2**2 / (n2 + epsilon)))
+    
+    # t-statistic
+    t_stat = (mean1 - mean2) / (se + epsilon)
+    
+    # Degrees of freedom using Welch–Satterthwaite equation
+    df_num = (std1**2 / (n1 + epsilon) + std2**2 / (n2 + epsilon))**2
+    df_denom = ((std1**2 / (n1 + epsilon))**2) / (n1 - 1 + epsilon) + \
+               ((std2**2 / (n2 + epsilon))**2) / (n2 - 1 + epsilon)
+    df = df_num / (df_denom + epsilon)
+    
+    # Two-tailed p-value
+    p_value = 2 * (1 - ss.t.cdf(abs(t_stat), df))
+    return p_value
+
+
+def cohen_d_from_summary_stats(mean1, mean2, std1, std2, epsilon=1e-8):
+    """
+    Calculate Cohen's d effect size using summary statistics.
+    
+    This estimates the standardized difference between two means
+    using the pooled standard deviation. Used when only aggregated
+    statistics (mean and std) are available per transition.
+
+    Args:
+        mean1 (float): Mean of group 1 (reference).
+        mean2 (float): Mean of group 2 (detection).
+        std1 (float): Standard deviation of group 1.
+        std2 (float): Standard deviation of group 2.
+        epsilon (float): Small value to avoid division by zero.
+
+    Returns:
+        float: Cohen's d effect size.
+    """
+    # Pooled standard deviation
+    pooled_std = np.sqrt((std1**2 + std2**2) / 2)
+    return (mean2 - mean1) / (pooled_std + epsilon)
+
+
+def changed_transitions_detection(self, reference_window_df, detection_window_df, features_windows, dfg_changes):
+    """
+    Detect changes in transitions between two sets of windows (e.g., reference and detection windows), with a presence/absence rule using a percentage threshold.
+
+    Args:
+        self: The instance of the class (for accessing thresholds and pseudo-count).
+        reference_window_df (DataFrame): The reference window data.
+        detection_window_df (DataFrame): The detection window data.
+        features_windows (list): List of feature names to analyze.
+        dfg_changes (dict, optional): Dictionary containing new and deleted activities from DFG comparison.
+
+    Returns:
+        DataFrame: A DataFrame containing the transitions with significant changes.
+    """
+    # Ensure all features present in both, fill missing with 0 BEFORE merging
+    all_features = set(reference_window_df.columns) | set(detection_window_df.columns)
+    all_features -= {'activity_from', 'activity_to'}
+    
+    # For reference window: keep only activity_from, activity_to, and features, then add missing features with 0, and rename to _ref
+    ref_df = reference_window_df.copy()
+    for feature in all_features:
+        if feature not in ref_df.columns:
+            ref_df[feature] = 0
+    ref_df = ref_df[['activity_from', 'activity_to'] + sorted(all_features)]
+    ref_df = ref_df.rename(columns={f: f + '_ref' for f in all_features})
+    
+    # For detection window: same, but _det
+    det_df = detection_window_df.copy()
+    for feature in all_features:
+        if feature not in det_df.columns:
+            det_df[feature] = 0
+    det_df = det_df[['activity_from', 'activity_to'] + sorted(all_features)]
+    det_df = det_df.rename(columns={f: f + '_det' for f in all_features})
+    
+    # Merge on activity_from and activity_to
+    merged_windows_df = pd.merge(
+        ref_df, det_df,
+        on=['activity_from', 'activity_to'],
+        how='outer'
+    )
+    # Fill any remaining NaNs with 0
+    merged_windows_df = merged_windows_df.fillna(0)
+
+    # Create perspective classification function
+    def classify_feature_perspective(feature):
+        """Classify the perspective of a feature based on its name."""
+        # Control flow features
+        if any(feature.startswith(f) for f in set(self.control_flow_features)):
+            return 'control_flow'
+        # Time features
+        elif any(feature.startswith(f) for f in set([feature for feature, _ in self.time_features])):
+            return 'time'
+        # Resource features
+        elif any(feature.startswith(f) for f in set([feature for feature, _ in self.resource_features])):
+            return 'resource'
+        # Data features
+        elif any(feature.startswith(f) for f in set([feature for feature, _ in self.data_features])):
+            return 'data'
+        else:
+            return 'unknown'
+
+    # Initialize a DataFrame to store the results with perspective column
+    changed_transitions = pd.DataFrame(columns=['transition', 'feature', 'perspective', 'transition_status', 'activity_status', 'p_value', 'effect_size', 'ref_value', 'det_value', 'dif_value'])
 
     # Perform statistical tests for each variable and transition
-    i=0
+    i = 0
     for index, row in merged_windows_df.iterrows():
         transition = (row['activity_from'], row['activity_to'])
-
         for feature in features_windows:
-
             variable_ref = feature + '_ref'
             variable_det = feature + '_det'
-
             ref_value = row[variable_ref]
             det_value = row[variable_det]
+            ref_total = merged_windows_df[variable_ref].sum()
+            det_total = merged_windows_df[variable_det].sum()
+            ref_pct = ref_value / ref_total if ref_total > 0 else 0
+            det_pct = det_value / det_total if det_total > 0 else 0
 
-            # Check if the feature is a proportion or count
-            test_type = identify_statistical_test(merged_windows_df[[variable_ref, variable_det]].values.flatten())
-
-            # Perform the appropriate statistical test
-            if test_type == 'count_test':
-                p_value = perform_count_test(merged_windows_df, row, variable_ref, variable_det)
-                # Calculate corrected Cramér's V
-                effect_size = cramers_corrected_stat(merged_windows_df, variable_ref, variable_det, ref_value, det_value)
-                is_significant = p_value is not None and p_value < self.pvalue_threshold_localization and abs(effect_size) > self.effect_count_threshold_localization
+            is_significant = False
+            transition_status = ''
+            
+            if ref_value == 0 and det_value == 0:
+                effect_size = 0
+                p_value = 1
+                transition_status = 'no change'
+            elif ref_value > 0 and det_value == 0 and ref_pct >= self.presence_percentage_threshold_localization:
+                is_significant = True
+                effect_size = 1
+                p_value = 0
+                transition_status = 'deleted'
+            elif det_value > 0 and ref_value == 0 and det_pct >= self.presence_percentage_threshold_localization:
+                is_significant = True
+                effect_size = 1
+                p_value = 0
+                transition_status = 'new'
             else:
-                p_value = perform_proportions_test(merged_windows_df, row, transition, variable_ref, variable_det, self.pseudo_count_localization)
-                # Calculate Cohen's h
-                effect_size = cohen_h(ref_value, det_value)
-                is_significant = p_value is not None and p_value < self.pvalue_threshold_localization and abs(effect_size) > self.effect_prop_threshold_localization
-            # Record the significant result
+                test_type = identify_statistical_test(merged_windows_df[[variable_ref, variable_det]].values.flatten())
+                if test_type == 'count_test':
+                    try:
+                        p_value = perform_count_test(merged_windows_df, row, variable_ref, variable_det)
+                        effect_size = cramers_corrected_stat(merged_windows_df, variable_ref, variable_det, ref_value, det_value)
+                    except ValueError:
+                        effect_size = 0
+                        p_value = 1
+                    is_significant = p_value is not None and p_value < self.pvalue_threshold_localization and abs(effect_size) > self.effect_threshold_localization
+                elif test_type == 'mean_test':
+                    ref_value = row[variable_ref]
+                    det_value = row[variable_det]
+                    n_ref = row['frequency_ref']
+                    n_det = row['frequency_det']
+                    std_ref = merged_windows_df[variable_ref].std()
+                    std_det = merged_windows_df[variable_det].std()
+
+                    p_value = t_test_from_summary_stats(ref_value, det_value, std_ref, std_det, n_ref, n_det)
+                    effect_size = cohen_d_from_summary_stats(ref_value, det_value, std_ref, std_det)
+
+                    is_significant = p_value is not None and p_value < self.pvalue_threshold_localization and abs(effect_size) > self.effect_threshold_localization
+                elif test_type == 'proportion_test':
+                    p_value = perform_proportions_test(merged_windows_df, row, transition, variable_ref, variable_det, self.pseudo_count_localization)
+                    effect_size = cohen_h(ref_value, det_value)
+                    is_significant = p_value is not None and p_value < self.pvalue_threshold_localization and abs(effect_size) > self.effect_threshold_localization
+
             if is_significant:
-                changed_transitions.loc[i] = [transition, feature, p_value, effect_size, ref_value, det_value, det_value - ref_value]
+                perspective = classify_feature_perspective(feature)
+                if transition_status == '':
+                    transition_status = 'significant difference'
+                
+                # Determine activity status based on dfg_changes
+                activity_status = 'no change'
+                if dfg_changes is not None:
+                    new_activities = set(dfg_changes.get('New activities added to the process', []))
+                    deleted_activities = set(dfg_changes.get('Deleted activities from the process', []))
+                    
+                    activity_from, activity_to = transition
+                    
+                    # Check which activities are new or deleted
+                    new_activities_in_transition = []
+                    deleted_activities_in_transition = []
+                    
+                    if activity_from in new_activities:
+                        new_activities_in_transition.append(activity_from)
+                    if activity_to in new_activities:
+                        new_activities_in_transition.append(activity_to)
+                    if activity_from in deleted_activities:
+                        deleted_activities_in_transition.append(activity_from)
+                    if activity_to in deleted_activities:
+                        deleted_activities_in_transition.append(activity_to)
+                    
+                    # Build status description
+                    status_parts = []
+                    
+                    if new_activities_in_transition:
+                        status_parts.append(f"new({', '.join(new_activities_in_transition)})")
+                    if deleted_activities_in_transition:
+                        status_parts.append(f"deleted({', '.join(deleted_activities_in_transition)})")
+                    
+                    if status_parts:
+                        activity_status = " | ".join(status_parts)
+                
+                changed_transitions.loc[i] = [transition, feature, perspective, transition_status, activity_status, p_value, effect_size, ref_value, det_value, det_value - ref_value]
                 i += 1
-        
-    return changed_transitions  
+
+    return changed_transitions
 
 
 def create_dfg_from_dataset(dataset):
+    """
+    Create a Directly-Follows Graph (DFG) from the given dataset.
+
+    Args:
+        dataset (DataFrame): The input dataset containing the event log.
+
+    Returns:
+        DFG: A DFG object representing the process.
+    """
     # Creating a DFG from the dataset
     dfg_transitions = {(row['activity_from'], row['activity_to']): row['frequency'] for index, row in dataset.iterrows() if row['frequency'] > 0}
 
@@ -216,6 +445,17 @@ def create_dfg_from_dataset(dataset):
 
 
 def create_dfg_from_transitions(dfg_transitions, start_activities_freq, end_activities_freq):
+    """
+    Create a Directly-Follows Graph (DFG) from the given transitions and activity frequencies.
+
+    Args:
+        dfg_transitions (dict): A dictionary with (from_activity, to_activity) as keys and frequencies as values.
+        start_activities_freq (dict): A dictionary with start activities and their frequencies.
+        end_activities_freq (dict): A dictionary with end activities and their frequencies.
+
+    Returns:
+        DFG: A DFG object representing the process.
+    """
     dfg = DFG()
 
     # Adding transitions to the DFG
@@ -234,6 +474,16 @@ def create_dfg_from_transitions(dfg_transitions, start_activities_freq, end_acti
 
 
 def compare_dfgs(dfg1, dfg2):
+    """
+    Compare two Directly-Follows Graphs (DFGs) and identify changes in transitions and activities.
+
+    Args:
+        dfg1 (DFG): The first DFG to compare.
+        dfg2 (DFG): The second DFG to compare.
+
+    Returns:
+        dict: A dictionary summarizing the changes between the two DFGs.
+    """
     # Helper to check if a node is synthetic
     def is_synthetic_node(node):
         return node in {'unknown_previous_activities', 'unknown_following_activities'}
@@ -292,10 +542,29 @@ def compare_dfgs(dfg1, dfg2):
 
 
 def create_bpmn_from_dfg(dfg):
+    """
+    Create a BPMN diagram from the given Directly-Follows Graph (DFG).
+
+    Args:
+        dfg (DFG): The input DFG.
+
+    Returns:
+        BPMNDiagram: A BPMN diagram object representing the process.
+    """
     return pm4py.discover_bpmn_inductive(dfg, noise_threshold=0)
 
 
 def wrap_text(text, max_length=10):
+    """
+    Wrap text to a specified maximum length, breaking lines at spaces between words.
+
+    Args:
+        text (str): The input text to wrap.
+        max_length (int): The maximum length of each line.
+
+    Returns:
+        str: The wrapped text.
+    """
     # Replace underscores with spaces to handle words like "Loan_application_received"
     text = text.replace('_', ' ')
     words = text.split()
@@ -315,7 +584,21 @@ def wrap_text(text, max_length=10):
 
     return wrapped_text
 
-def localization_dfg_visualization(dfg, change_informations, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2"):
+def localization_dfg_visualization(dfg, change_informations, changed_transitions, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2"):
+    """
+    Visualize the Directly-Follows Graph (DFG) with localization changes.
+
+    Args:
+        dfg (DFG): The input DFG.
+        change_informations (dict): A dictionary with information about changes (new/deleted transitions and activities).
+        bgcolor (str): Background color of the graph.
+        rankdir (str): Direction of the graph layout (e.g., 'LR' for left-to-right).
+        node_penwidth (str): Pen width for nodes.
+        edge_penwidth (str): Pen width for edges.
+
+    Returns:
+        None: Displays the graph inline in Jupyter Notebook.
+    """
     
     dfg_graph = dfg.graph
     start_activities = dfg.start_activities
@@ -328,15 +611,32 @@ def localization_dfg_visualization(dfg, change_informations, bgcolor="white", ra
     edge_annotations = {}
     for key, transitions in change_informations.items():
         if key.startswith("Transitions with variations in"):
-            # Strip the unwanted prefix and get the part after it
+            # Get the feature name
             prefix_length = len("Transitions with variations in")
-            suffix = key[prefix_length:].strip()  # Optionally remove any leading or trailing whitespace
+            feature = key[prefix_length:].strip()
             for transition in transitions:
-                if transition in edge_annotations:
-                    edge_annotations[transition].append(suffix)
+                # Find the row in changed_transitions for this transition and feature
+                match = changed_transitions[
+                    (changed_transitions['transition'] == transition) &
+                    (changed_transitions['feature'] == feature)
+                ]
+                if not match.empty:
+                    ref_value = match.iloc[0]['ref_value']
+                    det_value = match.iloc[0]['det_value']
+                    p_value = match.iloc[0]['p_value']
+                    effect_size = match.iloc[0]['effect_size']
+                    # Format p_value: 2 decimals, but if <0.01, show 0.00
+                    if p_value < 0.01:
+                        p_str = "0.00"
+                    else:
+                        p_str = f"{p_value:.2f}"
+                    annotation = f"{feature} (ref: {ref_value:.2f}, det: {det_value:.2f}, pvalue: {p_str}, effsize: {effect_size:.2f})"
                 else:
-                    edge_annotations[transition] = [suffix]
-
+                    annotation = feature
+                if transition in edge_annotations:
+                    edge_annotations[transition].append(annotation)
+                else:
+                    edge_annotations[transition] = [annotation]
 
     dot = Digraph(engine='dot', graph_attr={'bgcolor': bgcolor, 'rankdir': rankdir})
 
@@ -426,7 +726,16 @@ def localization_dfg_visualization(dfg, change_informations, bgcolor="white", ra
 
 
 def create_process_tree_from_dfg(dfg, parameters):
+    """
+    Create a process tree from the given Directly-Follows Graph (DFG) using the inductive miner algorithm.
 
+    Args:
+        dfg (DFG): The input DFG.
+        parameters (dict): Parameters for the inductive miner algorithm.
+
+    Returns:
+        ProcessTree: A process tree object representing the process.
+    """
     # Create process tree
     process_tree = inductive_miner.apply(dfg, parameters=parameters) 
     # process_tree = pm4py.discover_process_tree_inductive(dfg, noise_threshold=0.0)
@@ -444,6 +753,17 @@ def create_process_tree_from_dfg(dfg, parameters):
     
 
 def llm_instanciating(llm_company, llm_model, api_key):
+    """
+    Instantiate the LLM (Large Language Model) class for OpenAI or Google.
+
+    Args:
+        llm_company (str): The company providing the LLM ('openai' or 'google').
+        llm_model (str): The model name or ID.
+        api_key (str): The API key for authentication.
+
+    Returns:
+        llm: An instance of the LLM class for the specified company and model.
+    """
         
     if llm_company == "openai":
 
@@ -468,6 +788,18 @@ def llm_instanciating(llm_company, llm_model, api_key):
     
 
 def llm_call_response(llm_company, llm_model, llm, user_prompt):
+    """
+    Call the LLM with the user prompt and return the response.
+
+    Args:
+        llm_company (str): The company providing the LLM ('openai' or 'google').
+        llm_model (str): The model name or ID.
+        llm: The LLM instance.
+        user_prompt (str): The prompt to send to the LLM.
+
+    Returns:
+        str: The response text from the LLM.
+    """
     if llm_company == "openai":
 
         response = llm.chat.completions.create(
@@ -501,9 +833,18 @@ def llm_call_response(llm_company, llm_model, llm, user_prompt):
         
 
 def llm_instructions_load(llm_instructions_path):
+    """
+    Load and parse the LLM instructions from a YAML file.
 
-    # Open the JSON file for reading
-    with open(llm_instructions_path, 'r') as file:
+    Args:
+        llm_instructions_path (str): The file path to the YAML instructions.
+
+    Returns:
+        dict: A dictionary containing the parsed instructions.
+    """
+
+    # Open the YAML file for reading with UTF-8 encoding
+    with open(llm_instructions_path, 'r', encoding='utf-8') as file:
         # Parse the yaml file into a Python dictionary
         llm_instructions = yaml.safe_load(file)
 
@@ -555,6 +896,17 @@ def llm_instructions_load(llm_instructions_path):
 
 
 def llm_bpmn_analysis_prompt(llm_instructions, reference_bpmn_text, detection_bpmn_text):
+    """
+    Add BPMN diagrams to the LLM prompt for analysis.
+
+    Args:
+        llm_instructions (dict): The LLM instructions dictionary.
+        reference_bpmn_text (str): The BPMN text for the reference window.
+        detection_bpmn_text (str): The BPMN text for the detection window.
+
+    Returns:
+        str: The updated prompt for BPMN analysis.
+    """
 
     # Add BPMN diagrams to prompt
     llm_instructions["instructions_bpmn_analysis"] += (
@@ -569,14 +921,19 @@ def llm_bpmn_analysis_prompt(llm_instructions, reference_bpmn_text, detection_bp
 
 
 def llm_classification_prompt(llm_instructions, change_informations, reference_bpmn_text, detection_bpmn_text, llm_bpmn_analysis_response):
+    """
+    Create the classification prompt for the LLM based on the changes and BPMN diagrams.
 
-    # prompt += (
-    # ''' 
-    # \n### BPMN diagrams ###
-    # - The BPMN before the concept drift: {0}. \n
-    # - The BPMN after the concept drift: {1}. \n
+    Args:
+        llm_instructions (dict): The LLM instructions dictionary.
+        change_informations (dict): A dictionary with information about changes (new/deleted transitions and activities).
+        reference_bpmn_text (str): The BPMN text for the reference window.
+        detection_bpmn_text (str): The BPMN text for the detection window.
+        llm_bpmn_analysis_response (str): The response from the LLM for BPMN analysis.
 
-    # ''').format(reference_bpmn_text, detection_bpmn_text)
+    Returns:
+        str: The complete prompt for classification.
+    """
 
     # Get the prompt
     prompt = llm_instructions["instructions_classification"] 
@@ -691,6 +1048,15 @@ def llm_classification_prompt(llm_instructions, change_informations, reference_b
 
 
 def llm_classification_formatting(characterization_classification):
+    """
+    Format the characterization classification string into a dictionary.
+
+    Args:
+        characterization_classification (str): The characterization classification string.
+
+    Returns:
+        dict: The formatted classification as a dictionary.
+    """
 
     # Finding the start and end of the dictionary string
     try:
@@ -702,4 +1068,106 @@ def llm_classification_formatting(characterization_classification):
         return ast.literal_eval(characterization_classification[start_index:end_index].strip())
     except:
         return "Classification not in the expected format."
+
+
+def llm_characterization_prompt(llm_instructions, reference_window_df, detection_window_df, tmpd_instance):
+    """
+    Create a comprehensive characterization prompt for LLM analysis.
+    
+    Args:
+        llm_instructions (dict): The LLM instructions dictionary.
+        reference_window_df (pd.DataFrame): Reference window process flow data.
+        detection_window_df (pd.DataFrame): Detection window process flow data.
+        tmpd_instance (TMPD): The TMPD instance with access to all analysis data.
+    
+    Returns:
+        str: The complete prompt for characterization analysis.
+    """
+    
+    # Get the main instructions
+    prompt = llm_instructions.get("main_instructions", "")
+    
+    # Get the sources configuration
+    sources = llm_instructions.get("sources", [])
+    
+    # Add information sources based on configuration
+    for source in sources:
+        if source == "changed_transitions" and hasattr(tmpd_instance, 'changed_transitions'):
+            prompt += "\n\n### Changed Transitions Analysis ###\n"
+            if not tmpd_instance.changed_transitions.empty:
+                prompt += f"Detailed statistical analysis of {len(tmpd_instance.changed_transitions)} significant changes:\n"
+                prompt += tmpd_instance.changed_transitions.to_string(index=False)
+            else:
+                prompt += "No statistically significant changes detected at the transition level.\n"
+        
+        elif source == "reference_window_df":
+            prompt += "\n\n### Reference Window Transition Matrix ###\n"
+            prompt += reference_window_df.to_string(index=False) if not reference_window_df.empty else "No reference transition matrix available.\n"
+        
+        elif source == "detection_window_df":
+            prompt += "\n\n### Detection Window Transition Matrix ###\n"
+            prompt += detection_window_df.to_string(index=False) if not detection_window_df.empty else "No detection transition matrix available.\n"
+        
+        elif source == "change_informations" and hasattr(tmpd_instance, 'change_informations'):
+            prompt += "\n\n### High-Level Structural Changes ###\n"
+            for key, value in tmpd_instance.change_informations.items():
+                if isinstance(value, list) and value != ['None']:
+                    prompt += f"{key}: {value}\n"
+        
+        elif source == "reference_bpmn_text" and hasattr(tmpd_instance, 'reference_bpmn_text'):
+            prompt += "\n\n### Reference Window BPMN Structure (Process Model) ###\n"
+            prompt += "**Note: This is a process model that may have limitations. Reference Window Transition Matrix is more reliable.**\n"
+            prompt += f"{tmpd_instance.reference_bpmn_text}\n"
+        
+        elif source == "detection_bpmn_text" and hasattr(tmpd_instance, 'detection_bpmn_text'):
+            prompt += "\n\n### Detection Window BPMN Structure (Process Model) ###\n"
+            prompt += "**Note: This is a process model that may have limitations. Detection Window Transition Matrix is more reliable.**\n"
+            prompt += f"{tmpd_instance.detection_bpmn_text}\n"
+        
+        elif source in llm_instructions:
+            # Generic handler for any additional keys in the YAML file
+            prompt += f"\n\n### {source.replace('_', ' ').title()} ###\n"
+            source_data = llm_instructions[source]
+            
+            if isinstance(source_data, dict):
+                # Handle dictionary structures (like controlflow_change_patterns)
+                for key, value in source_data.items():
+                    if isinstance(value, str):
+                        prompt += f"\n{key.replace('_', ' ').title()}:\n{value}\n"
+                    else:
+                        prompt += f"\n{key.replace('_', ' ').title()}: {value}\n"
+            elif isinstance(source_data, list):
+                # Handle list structures
+                for item in source_data:
+                    if isinstance(item, str):
+                        prompt += f"{item}\n"
+                    else:
+                        prompt += f"{item}\n"
+            elif isinstance(source_data, str):
+                # Handle string values
+                prompt += f"{source_data}\n"
+            else:
+                # Handle other data types
+                prompt += f"{source_data}\n"
+    
+    return prompt
+
+
+def llm_characterization_formatting(characterization_response):
+    """
+    Format and structure the characterization response.
+    
+    Args:
+        characterization_response (str): Raw LLM response for characterization.
+    
+    Returns:
+        dict: Structured characterization analysis.
+    """
+    # For now, return the response as-is
+    # In the future, this could parse the response into structured format
+    return {
+        "raw_response": characterization_response,
+        "analysis_timestamp": pd.Timestamp.now(),
+        "status": "completed"
+    }
 
