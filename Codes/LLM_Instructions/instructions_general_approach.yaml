@@ -22,14 +22,14 @@
 #
 # Predefined sources (from TMPD class):
 
-#   - reference_window_df: Transition matrix BEFORE change with columns:
+#   - reference_transition_matrix: Transition matrix BEFORE change with columns:
 #       * activity_from, activity_to: transition identifiers (always available)
 #       * frequency, percentual: control-flow metrics (always available)
 #       * Additional columns depend on user configuration (time, resource, data metrics)
 #       Use to show the process structure and metrics before the drift/change.
-#   - detection_window_df: Transition matrix AFTER change with same structure as reference_window_df.
+#   - detection_transition_matrix: Transition matrix AFTER change with same structure as reference_transition_matrix.
 #       Use to show the process structure and metrics after the drift/change.
-#   - changed_transitions: Comprehensive statistical analysis with columns:
+#   - significant_transition_changes: Comprehensive statistical analysis with columns:
 #       * transition: (activity_from, activity_to) pairs
 #       * feature: specific metric that changed (varies based on user configuration)
 #       * perspective: control_flow (always), time, resource, data (if configured)
@@ -38,7 +38,7 @@
 #       * p_value, effect_size: statistical significance and magnitude
 #       * ref_value, det_value, dif_value: before, after, and difference values
 #       Use for detailed evidence of what changed across available perspectives.
-#   - change_informations: High-level summary of new/deleted activities and transitions.
+#   - high_level_changes: High-level summary of new/deleted activities and transitions.
 #       Use for a quick overview of structural changes.
 #   - reference_bpmn_text: BPMN structure (process model) before the change.
 #       Use for control-flow structure and operators before the change. Note: This is a process model that may have limitations.
@@ -50,13 +50,14 @@
 # - You can add any other key from this YAML file to include custom information.
 # ------------------------------------------------------------------------------
 sources:
-  - reference_window_df
-  - detection_window_df
-  - changed_transitions
-  - change_informations
-  - reference_bpmn_text
-  - detection_bpmn_text
-  - controlflow_change_patterns
+  - reference_transition_matrix
+  - detection_transition_matrix
+  - significant_transition_changes
+  - high_level_changes
+  - bpmn_diagrams_instructions
+#   - reference_bpmn_text
+#   - detection_bpmn_text
+#   - controlflow_change_patterns
   # Add any other keys from this YAML file here to include them in the prompt
 
 # ------------------------------------------------------------------------------
@@ -73,14 +74,14 @@ main_instructions: |
   **Your analysis must go beyond simply listing differences.** The user has access to the raw data and statistical tables. Your job is to interpret this information holistically, identify key insights, and present a coherent narrative that explains the *nature*, *scope*, and *interconnectedness* of the changes.
 
   ### Input Data ###
-    - reference_window_df: Transition matrix BEFORE change with columns:
+    - reference_transition_matrix: Transition matrix BEFORE change with columns:
         * activity_from, activity_to: transition identifiers (always available)
         * frequency, percentual: control-flow metrics (always available)
         * Additional columns depend on user configuration (time, resource, data metrics)
         Use to show the process structure and metrics before the drift/change.
-    - detection_window_df: Transition matrix AFTER change with same structure as reference_window_df.
+    - detection_transition_matrix: Transition matrix AFTER change with same structure as reference_transition_matrix.
         Use to show the process structure and metrics after the drift/change.
-    - changed_transitions: Comprehensive statistical analysis with columns:
+    - significant_transition_changes: Comprehensive statistical analysis with columns:
         * transition: (activity_from, activity_to) pairs
         * feature: specific metric that changed (varies based on user configuration)
         * perspective: control_flow (always), time, resource, data (if configured)
@@ -89,6 +90,8 @@ main_instructions: |
         * p_value, effect_size: statistical significance and magnitude
         * ref_value, det_value, dif_value: before, after, and difference values
         Use for detailed evidence of what changed across available perspectives.
+    - high_level_changes: High-level summary of new/deleted activities and transitions.
+        Use for a quick overview of structural changes.
     - controlflow_change_patterns: Known control-flow change patterns (dict of pattern descriptions).
         Use to help the LLM recognize and classify change patterns.
 
@@ -134,10 +137,12 @@ main_instructions: |
     - Example: "**Introduction of a new decision point**: The introduction of a new decision point in the control-flow was accompanied by longer processing times and a change in responsible roles, indicating that the added complexity might be affecting both efficiency and ownership across the process."
 
   **3. Control-Flow Pattern Recognition**
-  - Identify and **name** any known control-flow change patterns observed (from the provided list).
-  - Justify pattern matches with evidence, but avoid rigid listing. Integrate it into the narrative (e.g., “This sequence restructuring matches a Serial-Move pattern.”).
-  - Mention any combinations or novel structural motifs not covered by existing patterns.
-  - Use only control-flow perspective features to identify the pattern.
+  - Identify and **name** any known control-flow change patterns observed (from the Controlflow Change Patterns).
+  - Use only control-flow perspective features and the BPMN diagrams to identify the patterns.
+  - **BPMN Analysis**: Use the BPMN diagrams as your primary tool for understanding structural changes. They clearly show parallel and conditional operators that are difficult to derive from transition matrices alone. Compare the reference and detection BPMN diagrams to identify what changed structurally.
+  - **BPMN Validation**: Always validate any structural change inferred from BPMN diagrams against the transition matrices and change information. If a change (such as the deletion of an activity) is only visible in the BPMN and not supported by the transition matrices or change information, treat this as an inconsistency in the bpmn model. While BPMN diagrams provide valuable structural insights, they are process models that may have limitations and can miss information.
+  - **Combined Approach**: Start with BPMN comparison to understand structural changes, then use transition matrix data to confirm and quantify those changes. If there's a discrepancy, trust the transition matrix evidence.
+  - Note: It is difficult to validate a parallel relationship between two activities in the transition matrix, they may appear as bidirectional. If the BPMN shows a parallel relationship and the transition matrix shows a bidirectional relationship, then it is a parallel relationship.
 
   **4. Scope and Magnitude**
   - Describe the *extent* and *practical relevance* of the observed changes.
@@ -156,6 +161,30 @@ main_instructions: |
 
 
 # ------------------------------------------------------------------------------
+# BPMN DIAGRAMS INSTRUCTIONS
+# ------------------------------------------------------------------------------
+bpmn_diagrams_instructions: |
+  Familiarize yourself with the BPMN symbols used in the diagrams:
+        - Control-flow operators:
+            - Sequence fragments are denoted by 'Sequence'. Each item in a sequence fragment will be executed in order.
+            - Parallel fragments by 'Parallel'. Each item in a parallel fragment will be executed, but not necessarily in order.
+            - Conditional fragments by 'Conditional'. Only one item in a conditional fragment will be executed.
+            - Looping fragments by 'Loop'. Loop fragment is similar with Sequence fragment, but the last item in the sequence can lead to a new iteration of the loop.
+        - Silent transitions are indicated by 'tau'. This acts as a fake activity to be executed in the process. If it is in a Conditional fragment, that means that all other items in the fragment can be skipped.
+        - Nested fragments are enclosed in parentheses '()'.
+        - Items within a fragment are separated by commas.
+    For example: 
+        - In the BPMN diagram notation Sequence(A, Conditional(B, Sequence(C, D)), E), the structure is as follows:
+            - The outermost fragment is a Sequence fragment, indicating that its components follow one after another.
+            - Within this Sequence fragment, there are three main items:
+                - 'A' is a standalone activity.
+                - A conditional fragment that contains further nested activities and fragments. Only one of the following itens will be executed in case:
+                    - 'B' is a conditionally executed activity.
+                    - A nested Sequence fragment, containing activities 'C' and 'D'.
+                - 'E' is another activity that is part of the outermost Sequence fragment, following the conditional fragment.
+
+
+# ------------------------------------------------------------------------------
 # CONTROL-FLOW CHANGE PATTERNS (Custom Source)
 # This section contains the instructions for the control-flow change patterns.
 # It includes the instructions for each pattern and the evidence to be used to
@@ -164,126 +193,129 @@ main_instructions: |
 controlflow_change_patterns:
     - sre_instructions: | 
         Serial-Switch:
-         - If the new activity is added in a Sequence fragment between two existing activities or the deleted activity was in a Sequence fragment between two existing activities then is Serial-Switch pattern. 
-         - For example, the BPMN diagram could change from 'Sequence(A, B)' to 'Sequence(A, C, B)' or vice versa, where C is the activity involved.
+         - If there's a new activity added in a Sequence fragment between two existing activities or the deleted activity was in a Sequence fragment between two existing activities, then is Serial-Switch pattern. 
+         - **CRITICAL DISTINCTION**: In Serial-Switch, a NEW activity is added to a Sequence fragment or an EXISTING activity is DELETED from a Sequence fragment. In Serial-Move, an EXISTING activity MOVES from one position to a Sequence fragment (no activities are added or deleted). In Serial-To-Parallel, two EXISTING connected activities are moved from a Sequence fragment to a Parallel fragment (no activities are added or deleted).
+         - For example, the control-flow could change from 'Sequence(A, B)' to 'Sequence(A, C, B)' or vice versa, where C is the activity involved.
          - Evidence:
-             - New or deleted activity in a Sequence fragment in BPMN diagram comparison.
-             - New or deleted activity in the list of variations.
+             - New or deleted activity in a Sequence fragment.
     
     - pre_instructions: |
         Parallel-Switch:
-         - If the new activity is added in a Parallel fragment or the deleted activity was in a Parallel fragment then is Parallel-Switch pattern.
-         - For example, the BPMN diagram could change from 'Sequence(A, B, C)' to 'Sequence(A, Parallel(B, D), C)' or vice versa, where D is the activity involved.
+         - If there's a new activity added in a Parallel fragment or the deleted activity was in a Parallel fragment, then is Parallel-Switch pattern.
+         - For example, the control-flow could change from 'Sequence(A, B, C)' to 'Sequence(A, Parallel(B, D), C)' or vice versa, where D is the activity involved.
+         - **CRITICAL DISTINCTION**: In Parallel-Switch, a NEW activity is added to a Parallel fragment or an EXISTING activity is DELETED from a Parallel fragment. In Parallel-Move, an EXISTING activity MOVES from one position to a Parallel fragment (no activities are added or deleted). In Parallel-To-Sequence, two EXISTING connected activities are moved from a Sequence fragment to a Parallel fragment (no activities are added or deleted).
          - Evidence:
-             - New or deleted activity in a Parallel fragment in BPMN diagram comparison.
-             - New or deleted activity in the list of variations.
+             - New or deleted activity in a Parallel fragment.
     
     - cre_instructions: |
         Conditional-Switch:
-         - If the new activity is added in a conditional fragment or the deleted activity was in a conditional fragment then is Conditional-Switch pattern. 
-         - For example, the BPMN diagram could change from 'Sequence(A, B, C)' to 'Sequence(A, Conditional(B, D), C)' or vice versa, where D is the activity involved.
+         - If there's a new activity added in a conditional fragment or the deleted activity was in a conditional fragment, then is Conditional-Switch pattern. 
+         - **CRITICAL DISTINCTION**: In Conditional-Switch, a NEW activity is added to a Conditional fragment or an EXISTING activity is DELETED from a Conditional fragment. In Conditional-Move, an EXISTING activity MOVES from one position to a Conditional fragment (no activities are added or deleted). In Conditional-To-Sequence, two EXISTING connected activities are moved from a Conditional fragment to a Sequence fragment (no activities are added or deleted).
+         - For example, the control-flow could change from 'Sequence(A, B, C)' to 'Sequence(A, Conditional(B, D), C)' or vice versa, where D is the activity involved.
          - Evidence:
-             - New or deleted activity in a Conditional fragment in BPMN diagram comparison.
-             - New or deleted activities in the list of variations.
+             - New or deleted activity in a Conditional fragment.
     
     - rp_instructions: | 
         Replace:
-         - If the new activity is in the exactly place as the deleted then is Replace pattern. 
-         - For example, the BPMN diagram could change from 'Sequence(A, B, C)' to 'Sequence(A, D, C)', where B and D are the activities involved.
+         - If there's a new activity and a deleted activity, and the new activity is in the exactly place as the deleted, then is Replace pattern. 
+         - For example, the control-flow could change from 'Sequence(A, B, C)' to 'Sequence(A, D, C)', where B and D are the activities involved.
          - Evidence:
-             - Activities replaced in the BPMN diagram comparison.
-             - Both new and deleted activities in any fragment in BPMN diagram comparison.
-             - Both new and deleted activities in the list of variations.
+             - Both new and deleted activities.
+             - Activities replaced in the control-flow.
 
     - sm_instructions: |
         Serial-Move:
-         - If an activity has moved globally in the BPMN diagram into a Sequence fragment between two existing activities then is Serial-Move pattern.
-         - For example, the BPMN diagram could change from 'Sequence(A, B, C, D, E)' to 'Sequence(A, C, D, B, E)', where B is the activity involved.
+         - If an activity has moved in the control-flow into a Sequence fragment between two existing activities, then is Serial-Move pattern.
+         - For example: the control-flow could change from 'Sequence(A, B, C, D, E)' to 'Sequence(A, C, D, B, E)', where B is the activity involved.
          - Evidence:
-             - New or deleted Sequence fragment in BPMN diagram comparison.
-             - Activity moved globally to or from a Sequence fragment in BPMN diagram comparison.
-             - Both new and deleted transitions in the list of variations involving the moved activity.
+             - Activity moved to or from a Sequence fragment in the control-flow.
+             - Both new and deleted transitions involving the moved activity.
              
-    
     - pm_instructions: |
         Parallel-Move:
-         - If an activity has moved globally in the BPMN diagram into a Parallel fragment then is Parallel-Move pattern. 
-         - For example, the BPMN diagram could change from 'Sequence(A, B, C, D, E, F)' to 'Sequence(A, C, D, Parallel(B, E), F)', where B were moved ahead in the diagram an inserted in a new Parallel fragment with activity E.
+         - If an activity (or activities) is moved into or out of a Parallel fragment, and the activities were not previously directly followed, this is a Parallel-Move pattern.
+         - **CRITICAL DISTINCTION**:
+            - In Parallel-Move, an activity changes its execution context (from sequential to parallel), while in Swap, activities exchange positions but maintain the same execution context.
+            - In Parallel-To-Sequence, two directly followed activities are moved from a Parallel fragment to a Sequence fragment (they keep close but their relationship changed to or from parallel).
+         - For example, if activities n and p were not directly followed before but are now grouped in Parallel(n, p), this is a Parallel-Move.
          - Evidence:
-             - New or deleted Parallel fragment in BPMN diagram comparison.
-             - Activity moved globally to or from a Parallel fragment in BPMN diagram comparison.
-             - Both new and deleted transitions in the list of variations involving the moved activity.
-    
+             - Activity moved to or from a Parallel fragment in the control-flow.
+             - Activities must not have been directly followed in the original structure.
+             - Both new and deleted transitions involving the moved activity.
+             - Maybe a new or deleted Parallel fragment in the control-flow.
+             
     - cm_instructions: |
         Conditional-Move:
-         - If an activity has moved globally in the BPMN diagram into a Conditional fragment then is Conditional-Move pattern.
-         - For example, the BPMN diagram could change from 'Sequence(A, B, C, D, E, F)' to 'Sequence(A, C, D, Conditional(B, E), F)', where B were moved ahead in the diagram an inserted in a new Conditional fragment with activity E.
+         - If an activity (or activities) is moved into or out of a Conditional fragment, and the activities were not previously directly followed, this is a Conditional-Move pattern.
+         - **CRITICAL DISTINCTION**:
+            - In Conditional-Move, an activity changes its execution context (from sequential to conditional), while in Swap, activities exchange positions but maintain the same execution context.
+            - In Conditional-To-Sequence, two directly followed activities are moved from a Conditional fragment to a Sequence fragment (they keep close but their relationship changed to or from conditional).
+         - For example, the control-flow could change from 'Sequence(A, B, C, D, E, F)' to 'Sequence(A, C, Conditional(B, D), E, F)', where B were moved ahead in the diagram and inserted in a new Conditional fragment with activity D, but B and D were not directly followed before.
          - Evidence:
-             - New or deleted Conditional fragment in BPMN diagram comparison.
-             - Activity moved globally to or from a Conditional fragment in BPMN diagram comparison.
-             - Both new and deleted transitions in the list of variations involving the moved activity.
+             - Activity moved to or from a Conditional fragment in the control-flow.
+             - Activities must not have been directly followed in the original structure.
+             - Both new and deleted transitions involving the moved activity.
+             - Maybe a new or deleted Conditional fragment in the control-flow.
     
     - sw_instructions: |
         Swap:
-         - If two activities or two combinations of activities were swapped in the BPMN diagram then is Swap pattern.
-         - For example:
-            - The BPMN diagram could change from 'Sequence(A, B, C, D, E, F, G, H)' to 'Sequence(A, G, D, E, F, B, C, H)', where activities B and C were moved to the exact position of G, and G were moved to the exact position of B and C.
-            - The BPMN diagram could change from 'Sequence(A, Parallel(B, C), D)' to 'Sequence(Parallel(B, C), A, D)', where activities A were moved to the exact position of the Parallel fragment Parallel(B, C) and Parallel(B, C) were moved to the exact position of A.
+         - If two activities or two combinations of activities were swapped in the control-flow, occupying the same position and function as the other without any other change in the control-flow, then is Swap pattern.
+         - **CRITICAL DISTINCTION**: In Swap, activities exchange positions but maintain the same execution context of the other. In Parallel-Move/Conditional-Move/Serial-Move, an activity changes its execution context (from sequential to parallel/conditional/sequence). 
+         - For example, the control-flow could change from 'Sequence(A, B, C, D, E, F, G, H)' to 'Sequence(A, G, C, D, E, F, B, H)', where activities B and G were moved to the exact position of each other.
          - Evidence:
-             - Activities swapped in BPMN diagram comparison.
-             - Activities moved in the BPMN diagram comparison.
-             - Both new and deleted transitions in the list of variations involving the swapped activities.
+             - Activities moved occupying the same position and function as the other in the control-flow.
+             - Both new and deleted transitions involving the swapped activities.       
 
     - pl_instructions: |
         Parallel-To-Sequence:
-         - If two connected activities moved from a Sequence to a Parallel fragment or from a Parallel to Sequence then is Parallel-To-Sequence pattern. 
-         - For example, the BPMN diagram could change from 'Sequence(A, B, C, D)' to 'Sequence(A, Parallel(B, C), D)' or vice versa, where B and C were just inserted in a new Parallel fragment.
+         - If two connected sequential activities become parallel (or vice versa), then is Parallel-To-Sequence pattern. 
+         - For example, the control-flow could change from 'Sequence(A, B, C, D)' to 'Sequence(A, Parallel(B, C), D)' or vice versa, where B and C were just inserted in a new Parallel fragment.
          - Evidence:
-             - New or deleted Parallel fragment in BPMN diagram comparison.
-             - Activity moved locally to or from a Parallel fragment in BPMN diagram comparison.
-             - New (and sometimes deleted) transitions in the list of variations involving the activities included to or excluded from the Parallel fragment.
+             - Activity moved to or from a Parallel fragment in the control-flow.
+             - Activities must have been directly connected in the original structure.
+             - Both activities are still connected but their relationship changed to or from parallel.
+             - Maybe a new or deleted Parallel fragment in the control-flow.
+             - New (and sometimes deleted) transitions involving the activities included to or excluded from the Parallel fragment.      
     
     - cf_instructions: |
         Conditional-To-Sequence:
-         - If two connected activities moved from a Sequence to a Conditional fragment or from a Conditional to Sequence then is a Conditional-To-Sequence pattern.
-         - For example, the BPMN diagram could change from 'Sequence(A, B, C, D)' to 'Sequence(A, Conditional(B, C), D)' or vice versa, where B and C were just inserted in a new Conditional fragment.
+         - If two connected sequential activities become conditional (or vice versa), then is a Conditional-To-Sequence pattern.
+         - For example, the control-flow could change from 'Sequence(A, B, C, D)' to 'Sequence(A, Conditional(B, C), D)' or vice versa, where B and C were just inserted in a new Conditional fragment.
          - Evidence:
-             - New or deleted Conditional fragment in BPMN diagram comparison.
-             - Activity moved locally to or from a Conditional fragment in BPMN diagram comparison.
-             - New (and sometimes deleted) transitions in the list of variations involving the activities included to or excluded from the Conditional fragment.
+             - Activity moved to or from a Conditional fragment in the control-flow.
+             - Both activities are still connected but their relationship changed to or from conditional.
+             - Maybe a new or deleted Conditional fragment in the control-flow.
+             - New (and sometimes deleted) transitions involving the activities included to or excluded from the Conditional fragment.     
 
     - cd_instructions: |
         Control-Dependancy:
-         - If a Parallel fragment is restructured, involving a reordered sequence of activities,then is Control-Dependancy pattern. 
-         - For example, the BPMN diagram could change from 'Sequence(A, Parallel(B, Sequence(C, D)), E)' to 'Sequence(A, Sequence(Parallel(B, C), D), E)' or vice versa, where B, C, and D are the activities involved.
+         - If a Parallel fragment is restructured, involving a reordered sequence of activities, then is Control-Dependancy pattern. 
+         - For example, the control-flow could change from 'Sequence(A, Parallel(B, Sequence(C, D)), E)' to 'Sequence(A, Sequence(Parallel(B, C), D), E)' or vice versa, where B, C, and D are the activities involved.
          - Evidence:
-             - Parallel fragment is restructured in BPMN diagram comparison, involving a reordered sequence of activities, or it could be represented as a new Parallel fragment.
+             - Parallel fragment is restructured in the control-flow, involving a reordered sequence of activities, or it could be represented as a new Parallel fragment.
              - Activities were in a Parallel fragment and now they are sequence within this Parallel fragment or one of them is outside the fragment but the right next activity.
-             - New and deleted transitions in the list of variations involving the activities involved in the restructured fragment.
+             - New and deleted transitions involving the activities involved in the restructured fragment.
              - Involved activities moved locally inside the Parallel fragment or globally outside the Parallel fragment but nearby the Parallel fragment.
 
     - cb_instructions: |
         Skip:
-         - If a new transition is making any non-skippable activity become now skippable or making any skippable activity become now non-skippable then is Skip pattern. 
-         - For example, the BPMN diagram could change from 'Sequence(A, B, C)' to 'Sequence(A, Conditional(B, 'tau'), C)' or vice versa, where B is the activity involved.
+         - If a new transition is making any non-skippable activity become now skippable or making any skippable activity become now non-skippable, then is Skip pattern. 
+         - For example, the control-flow could change from 'Sequence(A, B, C)' to 'Sequence(A, Conditional(B, 'tau'), C)' or vice versa, where B is the activity involved.
          - Evidence:
-             - New or deleted transitions in the list of variations involving activities that isn't right next to the other in BPMN diagram.
-             - May be a new or deleted conditional fragment in BPMN diagram comparison with a silent transition ('tau'). Sometimes the silent transitions ('tau') will not be detect correctly, so rely on the new or deleted transitions in the list of variations.
+             - New or deleted transitions involving activities that isn't right next to the other in the control-flow.
+             - Maybe a new or deleted conditional fragment in the control-flow with a silent transition ('tau'). Sometimes the silent transitions ('tau') will not be detect correctly, so rely on the new or deleted transitions.
              - Involved activities moved locally.
     
     - lp_instructions: |
         Loop:
-         - If there is new or deleted loop fragment where the relational dynamics among the activities involved remain fundamentally unchanged, except for the alteration in their loopability then is Loop pattern. 
-         - For example, the BPMN diagram could change from 'Sequence(A, B, C, D, E)' to 'Sequence(A, Loop(B, C, D), E)' or vice versa or vice versa, where B, C, and D are the activities involved.
+         - If there is new or deleted loop fragment where the relational dynamics among the activities involved remain fundamentally unchanged, except for the alteration in their loopability, then is Loop pattern. 
+         - For example, the control-flow could change from 'Sequence(A, B, C, D, E)' to 'Sequence(A, Loop(B, C, D), E)' or vice versa, where B, C, and D are the activities involved.
          - Evidence:
-             - New or deleted Loop fragment in BPMN diagram comparison.
-             - New and deleted transitions in the list of variations involving the activities in the new or deleted loop.
-             - Involved activities moved locally to or from a Loop fragment in BPMN diagram comparison.
-             - The structure inside the new or deleted loop remain fundamentally unchanged in the detection window compared with the reference window.
+             - New or deleted Loop fragment in the control-flow.
+             - New and deleted transitions involving the activities in the new or deleted loop.
+             - Involved activities moved locally to or from a Loop fragment in the control-flow.
+             - The structure inside the new or deleted loop remain fundamentally unchanged.
 
     - fr_instructions: | 
         Frequency:
          - If there are transitions with variances without control-flow changes, then is Frequency pattern. 
-
-
-

@@ -50,12 +50,12 @@
 # - You can add any other key from this YAML file to include custom information.
 # ------------------------------------------------------------------------------
 sources:
-#   - reference_window_df
-#   - detection_window_df
+#   - reference_transition_matrix
+#   - detection_transition_matrix
   - reference_bpmn_text
   - detection_bpmn_text
-#   - changed_transitions
-  - change_informations
+#   - significant_transition_changes
+  - high_level_changes
   - controlflow_change_patterns
   # Add any other keys from this YAML file here to include them in the prompt
 

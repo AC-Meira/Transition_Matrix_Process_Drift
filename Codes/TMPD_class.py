@@ -434,7 +434,7 @@ class TMPD:
     
     def set_localization_task(self, reference_window_index: int, detection_window_index: int, 
                              pvalue_threshold: float = 0.05, effect_threshold: float = 0.2, 
-                             presence_percentage_threshold: float = 0.02, pseudo_count: int = 5) -> None:
+                             presence_percentage_threshold: float = 0.01, pseudo_count: int = 5) -> None:
         """
         Configures the localization task parameters.
         
@@ -463,8 +463,8 @@ class TMPD:
             self.get_windowing_strategy()[self.reference_window_index_localization]['end']
         ]
         self.run_process_representation(reference_window_data)
-        reference_window_df = self.get_process_representation()
-        reference_window_df = reference_window_df.reset_index()
+        reference_transition_matrix = self.get_process_representation()
+        reference_transition_matrix = reference_transition_matrix.reset_index()
 
         # Getting the detection window
         detection_window_data = self.transition_log.iloc[
@@ -472,27 +472,27 @@ class TMPD:
             self.get_windowing_strategy()[self.detection_window_index_localization]['end']
         ]
         self.run_process_representation(detection_window_data)
-        detection_window_df = self.get_process_representation()
-        detection_window_df = detection_window_df.reset_index()
+        detection_transition_matrix = self.get_process_representation()
+        detection_transition_matrix = detection_transition_matrix.reset_index()
 
         # Get DFGs
-        self.reference_dfg = TMPD_understanding_tasks.create_dfg_from_dataset(reference_window_df)
-        self.detection_dfg = TMPD_understanding_tasks.create_dfg_from_dataset(detection_window_df)
+        self.reference_dfg = TMPD_understanding_tasks.create_dfg_from_dataset(reference_transition_matrix)
+        self.detection_dfg = TMPD_understanding_tasks.create_dfg_from_dataset(detection_transition_matrix)
 
         # Compare DFGs
         dfg_changes = TMPD_understanding_tasks.compare_dfgs(self.reference_dfg, self.detection_dfg)
 
         # Convert DFG to process trees and get BPMN diagram text
         self.reference_bpmn_text = TMPD_understanding_tasks.create_process_tree_from_dfg(self.reference_dfg, parameters={"noise_threshold": 0})
-        self.detection_bpmn_text = TMPD_understanding_tasks.create_process_tree_from_dfg(self.detection_dfg, parameters={"noise_threshold": 0}) 
+        self.detection_bpmn_text = TMPD_understanding_tasks.create_process_tree_from_dfg(self.detection_dfg, parameters={"noise_threshold": 0})
 
         # Extracting features from both reference and detection windows
         features_windows = (
-            set(reference_window_df.columns) | set(detection_window_df.columns)
+            set(reference_transition_matrix.columns) | set(detection_transition_matrix.columns)
         ) - {'activity_from', 'activity_to', 'percentual'}
 
-        # Get changed transitions list
-        self.changed_transitions = TMPD_understanding_tasks.changed_transitions_detection(self, reference_window_df, detection_window_df, features_windows, dfg_changes)
+        # Get significant transition changes list
+        self.significant_transition_changes = TMPD_understanding_tasks.significant_transition_changes_detection(self, reference_transition_matrix, detection_transition_matrix, features_windows, dfg_changes)
 
         # Filter out perspective feature changes for new or deleted transitions
         # new_transitions = set(dfg_changes.get('New transitions added to the process', []))
@@ -506,23 +506,23 @@ class TMPD:
         # )
         # self.changed_transitions = self.changed_transitions[mask].reset_index(drop=True)
 
-        # Converting changed transitions list to a dict
-        changed_transitions_dict = {}
+        # Converting significant transition changes list to a dict
+        significant_transition_changes_dict = {}
         for feature in features_windows:
-            # Check if the feature has any changed transitions
-            if isinstance(self.changed_transitions, pd.DataFrame) and feature in self.changed_transitions['feature'].unique():
+            # Check if the feature has any significant transition changes
+            if isinstance(self.significant_transition_changes, pd.DataFrame) and feature in self.significant_transition_changes['feature'].unique():
                 # Extract transitions for the feature
-                transitions = self.changed_transitions[self.changed_transitions['feature'] == feature]['transition'].tolist()
+                transitions = self.significant_transition_changes[self.significant_transition_changes['feature'] == feature]['transition'].tolist()
             
             # Assign ['None'] if there are no transitions for the feature
             # else:
             #     transitions = ['None']
 
                 # Add the transitions to the dictionary with a modified key
-                changed_transitions_dict["Transitions with variations in " + str(feature)] = transitions
+                significant_transition_changes_dict["Transitions with variations in " + str(feature)] = transitions
 
-        # Combine changed transitions list with DFG changes
-        self.change_informations = changed_transitions_dict | dfg_changes
+        # Combine significant transition changes list with DFG changes
+        self.high_level_changes = significant_transition_changes_dict | dfg_changes
 
     def get_localization_task(self, show_localization_dfg: bool = True, show_original_dfg: bool = False, 
                              show_original_bpmn: bool = False) -> tuple:
@@ -535,7 +535,7 @@ class TMPD:
             show_original_bpmn (bool): Whether to show original BPMN diagrams. Defaults to False.
             
         Returns:
-            tuple: (changed_transitions, change_informations, reference_bpmn_text, detection_bpmn_text, window_info)
+            tuple: (significant_transition_changes, high_level_changes, reference_bpmn_text, detection_bpmn_text, window_info)
                 where window_info contains:
                 - reference_window_index: Index of the reference window
                 - detection_window_index: Index of the detection window
@@ -557,11 +557,11 @@ class TMPD:
 
         # Show DFGs with Localization results
         if show_localization_dfg:
-            TMPD_understanding_tasks.localization_dfg_visualization(self.reference_dfg, self.change_informations, self.changed_transitions, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2")
-            TMPD_understanding_tasks.localization_dfg_visualization(self.detection_dfg, self.change_informations, self.changed_transitions, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2")
+            TMPD_understanding_tasks.localization_dfg_visualization(self.reference_dfg, self.high_level_changes, self.significant_transition_changes, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2")
+            TMPD_understanding_tasks.localization_dfg_visualization(self.detection_dfg, self.high_level_changes, self.significant_transition_changes, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2")
 
         
-        return self.changed_transitions, self.change_informations, self.reference_bpmn_text, self.detection_bpmn_text
+        return self.significant_transition_changes, self.high_level_changes, self.reference_bpmn_text, self.detection_bpmn_text
     
     def set_characterization_task(self, llm_company: str = "google", llm_model: str = "gemini-2.0-flash", 
                                  api_key_path: Optional[str] = None, llm_instructions_path: Optional[str] = None) -> None:
@@ -592,29 +592,26 @@ class TMPD:
             self.get_windowing_strategy()[self.reference_window_index_localization]['end']
         ]
         self.run_process_representation(reference_window_data)
-        reference_window_df = self.get_process_representation()
-        reference_window_df = reference_window_df.reset_index()
-        reference_window_df = reference_window_df[['activity_from', 'activity_to', 'frequency', 'percentual']]
+        reference_transition_matrix = self.get_process_representation()
+        reference_transition_matrix = reference_transition_matrix.reset_index()
+        reference_transition_matrix = reference_transition_matrix[['activity_from', 'activity_to', 'frequency', 'percentual']]
 
         detection_window_data = self.transition_log.iloc[
             self.get_windowing_strategy()[self.detection_window_index_localization]['start']:
             self.get_windowing_strategy()[self.detection_window_index_localization]['end']
         ]
         self.run_process_representation(detection_window_data)
-        detection_window_df = self.get_process_representation()
-        detection_window_df = detection_window_df.reset_index()
-        detection_window_df = detection_window_df[['activity_from', 'activity_to', 'frequency', 'percentual']]
+        detection_transition_matrix = self.get_process_representation()
+        detection_transition_matrix = detection_transition_matrix.reset_index()
+        detection_transition_matrix = detection_transition_matrix[['activity_from', 'activity_to', 'frequency', 'percentual']]
         
         # Prepare the comprehensive characterization prompt
         self.llm_characterization_prompt = TMPD_understanding_tasks.llm_characterization_prompt(
             self.llm_instructions, 
-            reference_window_df, 
-            detection_window_df, 
+            reference_transition_matrix, 
+            detection_transition_matrix, 
             self
         )
-        
-        # print("################################ llm_characterization_prompt #####################################")
-        # print(self.llm_characterization_prompt)
         
         # Call LLM response
         self.characterization_response = TMPD_understanding_tasks.llm_call_response(
@@ -623,9 +620,6 @@ class TMPD:
             self.llm, 
             self.llm_characterization_prompt
         )
-        
-        # print("################################ characterization_response #####################################")
-        # print(self.characterization_response)
 
 
     def get_characterization_task(self) -> tuple:
@@ -697,7 +691,7 @@ class TMPD:
 
         ### Classification prompt
         # Prepare the prompt
-        self.llm_classification_prompt = TMPD_understanding_tasks.llm_classification_prompt(self.llm_instructions, self.change_informations, self.reference_bpmn_text, self.detection_bpmn_text, self.llm_bpmn_analysis_response) 
+        self.llm_classification_prompt = TMPD_understanding_tasks.llm_classification_prompt(self.llm_instructions, self.high_level_changes, self.reference_bpmn_text, self.detection_bpmn_text, self.llm_bpmn_analysis_response) 
         print("################################ llm_classification_prompt #####################################")
         print(self.llm_classification_prompt)
         # Call LLM response

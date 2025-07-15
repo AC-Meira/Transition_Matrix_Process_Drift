@@ -218,14 +218,14 @@ def cohen_d_from_summary_stats(mean1, mean2, std1, std2, epsilon=1e-8):
     return (mean2 - mean1) / (pooled_std + epsilon)
 
 
-def changed_transitions_detection(self, reference_window_df, detection_window_df, features_windows, dfg_changes):
+def significant_transition_changes_detection(self, reference_transition_matrix, detection_transition_matrix, features_windows, dfg_changes):
     """
     Detect changes in transitions between two sets of windows (e.g., reference and detection windows), with a presence/absence rule using a percentage threshold.
 
     Args:
         self: The instance of the class (for accessing thresholds and pseudo-count).
-        reference_window_df (DataFrame): The reference window data.
-        detection_window_df (DataFrame): The detection window data.
+        reference_transition_matrix (DataFrame): The reference transition matrix data.
+        detection_transition_matrix (DataFrame): The detection transition matrix data.
         features_windows (list): List of feature names to analyze.
         dfg_changes (dict, optional): Dictionary containing new and deleted activities from DFG comparison.
 
@@ -233,19 +233,19 @@ def changed_transitions_detection(self, reference_window_df, detection_window_df
         DataFrame: A DataFrame containing the transitions with significant changes.
     """
     # Ensure all features present in both, fill missing with 0 BEFORE merging
-    all_features = set(reference_window_df.columns) | set(detection_window_df.columns)
+    all_features = set(reference_transition_matrix.columns) | set(detection_transition_matrix.columns)
     all_features -= {'activity_from', 'activity_to'}
     
-    # For reference window: keep only activity_from, activity_to, and features, then add missing features with 0, and rename to _ref
-    ref_df = reference_window_df.copy()
+    # For reference transition matrix: keep only activity_from, activity_to, and features, then add missing features with 0, and rename to _ref
+    ref_df = reference_transition_matrix.copy()
     for feature in all_features:
         if feature not in ref_df.columns:
             ref_df[feature] = 0
     ref_df = ref_df[['activity_from', 'activity_to'] + sorted(all_features)]
     ref_df = ref_df.rename(columns={f: f + '_ref' for f in all_features})
     
-    # For detection window: same, but _det
-    det_df = detection_window_df.copy()
+    # For detection transition matrix: same, but _det
+    det_df = detection_transition_matrix.copy()
     for feature in all_features:
         if feature not in det_df.columns:
             det_df[feature] = 0
@@ -264,23 +264,28 @@ def changed_transitions_detection(self, reference_window_df, detection_window_df
     # Create perspective classification function
     def classify_feature_perspective(feature):
         """Classify the perspective of a feature based on its name."""
+        # Ensure feature lists are not None
+        control_flow_features = self.control_flow_features if self.control_flow_features is not None else []
+        time_features = [feature for feature, _ in self.time_features] if self.time_features is not None else []
+        resource_features = [feature for feature, _ in self.resource_features] if self.resource_features is not None else []
+        data_features = [feature for feature, _ in self.data_features] if self.data_features is not None else []
         # Control flow features
-        if any(feature.startswith(f) for f in set(self.control_flow_features)):
+        if any(feature.startswith(f) for f in set(control_flow_features)):
             return 'control_flow'
         # Time features
-        elif any(feature.startswith(f) for f in set([feature for feature, _ in self.time_features])):
+        elif any(feature.startswith(f) for f in set(time_features)):
             return 'time'
         # Resource features
-        elif any(feature.startswith(f) for f in set([feature for feature, _ in self.resource_features])):
+        elif any(feature.startswith(f) for f in set(resource_features)):
             return 'resource'
         # Data features
-        elif any(feature.startswith(f) for f in set([feature for feature, _ in self.data_features])):
+        elif any(feature.startswith(f) for f in set(data_features)):
             return 'data'
         else:
             return 'unknown'
 
     # Initialize a DataFrame to store the results with perspective column
-    changed_transitions = pd.DataFrame(columns=['transition', 'feature', 'perspective', 'transition_status', 'activity_status', 'p_value', 'effect_size', 'ref_value', 'det_value', 'dif_value'])
+    significant_transition_changes = pd.DataFrame(columns=pd.Index(['transition', 'feature', 'perspective', 'transition_status', 'activity_status', 'p_value', 'effect_size', 'ref_value', 'det_value', 'dif_value']))
 
     # Perform statistical tests for each variable and transition
     i = 0
@@ -299,16 +304,21 @@ def changed_transitions_detection(self, reference_window_df, detection_window_df
             is_significant = False
             transition_status = ''
             
+            # First, check if the transition is significant enough to be considered
+            # Skip if both percentages are below the threshold
+            if ref_pct < self.presence_percentage_threshold_localization and det_pct < self.presence_percentage_threshold_localization:
+                continue
+            
             if ref_value == 0 and det_value == 0:
                 effect_size = 0
                 p_value = 1
                 transition_status = 'no change'
-            elif ref_value > 0 and det_value == 0 and ref_pct >= self.presence_percentage_threshold_localization:
+            elif ref_value > 0 and det_value == 0:
                 is_significant = True
                 effect_size = 1
                 p_value = 0
                 transition_status = 'deleted'
-            elif det_value > 0 and ref_value == 0 and det_pct >= self.presence_percentage_threshold_localization:
+            elif det_value > 0 and ref_value == 0:
                 is_significant = True
                 effect_size = 1
                 p_value = 0
@@ -377,10 +387,10 @@ def changed_transitions_detection(self, reference_window_df, detection_window_df
                     if status_parts:
                         activity_status = " | ".join(status_parts)
                 
-                changed_transitions.loc[i] = [transition, feature, perspective, transition_status, activity_status, p_value, effect_size, ref_value, det_value, det_value - ref_value]
+                significant_transition_changes.loc[i] = [transition, feature, perspective, transition_status, activity_status, p_value, effect_size, ref_value, det_value, det_value - ref_value]
                 i += 1
 
-    return changed_transitions
+    return significant_transition_changes
 
 
 def create_dfg_from_dataset(dataset):
@@ -584,7 +594,7 @@ def wrap_text(text, max_length=10):
 
     return wrapped_text
 
-def localization_dfg_visualization(dfg, change_informations, changed_transitions, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2"):
+def localization_dfg_visualization(dfg, change_informations, significant_transition_changes, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2"):
     """
     Visualize the Directly-Follows Graph (DFG) with localization changes.
 
@@ -615,10 +625,10 @@ def localization_dfg_visualization(dfg, change_informations, changed_transitions
             prefix_length = len("Transitions with variations in")
             feature = key[prefix_length:].strip()
             for transition in transitions:
-                # Find the row in changed_transitions for this transition and feature
-                match = changed_transitions[
-                    (changed_transitions['transition'] == transition) &
-                    (changed_transitions['feature'] == feature)
+                # Find the row in significant_transition_changes for this transition and feature
+                match = significant_transition_changes[
+                    (significant_transition_changes['transition'] == transition) &
+                    (significant_transition_changes['feature'] == feature)
                 ]
                 if not match.empty:
                     ref_value = match.iloc[0]['ref_value']
@@ -1070,58 +1080,50 @@ def llm_classification_formatting(characterization_classification):
         return "Classification not in the expected format."
 
 
-def llm_characterization_prompt(llm_instructions, reference_window_df, detection_window_df, tmpd_instance):
+def llm_characterization_prompt(llm_instructions, reference_transition_matrix, detection_transition_matrix, tmpd_instance):
     """
-    Create a comprehensive characterization prompt for LLM analysis.
-    
+    Construct the LLM prompt for process characterization using the provided instructions and data sources.
+
     Args:
-        llm_instructions (dict): The LLM instructions dictionary.
-        reference_window_df (pd.DataFrame): Reference window process flow data.
-        detection_window_df (pd.DataFrame): Detection window process flow data.
-        tmpd_instance (TMPD): The TMPD instance with access to all analysis data.
-    
+        llm_instructions (dict): Instructions for the LLM.
+        reference_transition_matrix (pd.DataFrame): Reference transition matrix data.
+        detection_transition_matrix (pd.DataFrame): Detection transition matrix data.
+        tmpd_instance: The TMPD class instance containing additional attributes.
+
     Returns:
-        str: The complete prompt for characterization analysis.
+        str: The constructed prompt for the LLM.
     """
-    
-    # Get the main instructions
-    prompt = llm_instructions.get("main_instructions", "")
-    
-    # Get the sources configuration
-    sources = llm_instructions.get("sources", [])
-    
+    prompt = llm_instructions['main_instructions']
+    sources = llm_instructions['sources']
+
     # Add information sources based on configuration
     for source in sources:
-        if source == "changed_transitions" and hasattr(tmpd_instance, 'changed_transitions'):
-            prompt += "\n\n### Changed Transitions Analysis ###\n"
-            if not tmpd_instance.changed_transitions.empty:
-                prompt += f"Detailed statistical analysis of {len(tmpd_instance.changed_transitions)} significant changes:\n"
-                prompt += tmpd_instance.changed_transitions.to_string(index=False)
+        if source == "significant_transition_changes" and hasattr(tmpd_instance, 'significant_transition_changes'):
+            prompt += "\n\n### Significant Transition Changes Analysis ###\n"
+            if not tmpd_instance.significant_transition_changes.empty:
+                prompt += f"Detailed statistical analysis of {len(tmpd_instance.significant_transition_changes)} significant changes:\n"
+                prompt += tmpd_instance.significant_transition_changes.to_string(index=False)
             else:
                 prompt += "No statistically significant changes detected at the transition level.\n"
         
-        elif source == "reference_window_df":
-            prompt += "\n\n### Reference Window Transition Matrix ###\n"
-            prompt += reference_window_df.to_string(index=False) if not reference_window_df.empty else "No reference transition matrix available.\n"
+        elif source == "reference_transition_matrix":
+            prompt += "\n\n### Reference Transition Matrix ###\n"
+            prompt += reference_transition_matrix.to_string(index=False) if not reference_transition_matrix.empty else "No reference transition matrix available.\n"
         
-        elif source == "detection_window_df":
-            prompt += "\n\n### Detection Window Transition Matrix ###\n"
-            prompt += detection_window_df.to_string(index=False) if not detection_window_df.empty else "No detection transition matrix available.\n"
+        elif source == "detection_transition_matrix":
+            prompt += "\n\n### Detection Transition Matrix ###\n"
+            prompt += detection_transition_matrix.to_string(index=False) if not detection_transition_matrix.empty else "No detection transition matrix available.\n"
         
-        elif source == "change_informations" and hasattr(tmpd_instance, 'change_informations'):
-            prompt += "\n\n### High-Level Structural Changes ###\n"
-            for key, value in tmpd_instance.change_informations.items():
-                if isinstance(value, list) and value != ['None']:
-                    prompt += f"{key}: {value}\n"
+        elif source == "high_level_changes" and hasattr(tmpd_instance, 'high_level_changes'):
+            prompt += "\n\n### High-Level Changes ###\n"
+            for key, value in tmpd_instance.high_level_changes.items():
+                prompt += f"{key}: {value}\n"
         
         elif source == "reference_bpmn_text" and hasattr(tmpd_instance, 'reference_bpmn_text'):
-            prompt += "\n\n### Reference Window BPMN Structure (Process Model) ###\n"
-            prompt += "**Note: This is a process model that may have limitations. Reference Window Transition Matrix is more reliable.**\n"
+            prompt += "\n\n### Reference Window BPMN Diagram (Process Model) ###\n"
             prompt += f"{tmpd_instance.reference_bpmn_text}\n"
-        
         elif source == "detection_bpmn_text" and hasattr(tmpd_instance, 'detection_bpmn_text'):
-            prompt += "\n\n### Detection Window BPMN Structure (Process Model) ###\n"
-            prompt += "**Note: This is a process model that may have limitations. Detection Window Transition Matrix is more reliable.**\n"
+            prompt += "\n\n### Detection Window BPMN Diagram (Process Model) ###\n"
             prompt += f"{tmpd_instance.detection_bpmn_text}\n"
         
         elif source in llm_instructions:
@@ -1133,9 +1135,9 @@ def llm_characterization_prompt(llm_instructions, reference_window_df, detection
                 # Handle dictionary structures (like controlflow_change_patterns)
                 for key, value in source_data.items():
                     if isinstance(value, str):
-                        prompt += f"\n{key.replace('_', ' ').title()}:\n{value}\n"
+                        prompt += f"\n{value}\n"
                     else:
-                        prompt += f"\n{key.replace('_', ' ').title()}: {value}\n"
+                        prompt += f"\n{value}\n"
             elif isinstance(source_data, list):
                 # Handle list structures
                 for item in source_data:
