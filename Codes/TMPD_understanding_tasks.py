@@ -857,13 +857,6 @@ def llm_instructions_load(llm_instructions_path):
     with open(llm_instructions_path, 'r', encoding='utf-8') as file:
         # Parse the yaml file into a Python dictionary
         llm_instructions = yaml.safe_load(file)
-
-    # transform controlflow_change_patterns in dict
-    consolidated_dict = {}
-    for instruction_dict in llm_instructions["controlflow_change_patterns"]:
-        for key, value in instruction_dict.items():
-            consolidated_dict[key] = value
-    llm_instructions["controlflow_change_patterns"] = consolidated_dict
                             
     return llm_instructions
 
@@ -905,179 +898,178 @@ def llm_instructions_load(llm_instructions_path):
 #     return llm_instructions["changes_informations"]
 
 
-def llm_bpmn_analysis_prompt(llm_instructions, reference_bpmn_text, detection_bpmn_text):
-    """
-    Add BPMN diagrams to the LLM prompt for analysis.
+# def llm_bpmn_analysis_prompt(llm_instructions, reference_bpmn_text, detection_bpmn_text):
+#     """
+#     Add BPMN diagrams to the LLM prompt for analysis.
 
-    Args:
-        llm_instructions (dict): The LLM instructions dictionary.
-        reference_bpmn_text (str): The BPMN text for the reference window.
-        detection_bpmn_text (str): The BPMN text for the detection window.
+#     Args:
+#         llm_instructions (dict): The LLM instructions dictionary.
+#         reference_bpmn_text (str): The BPMN text for the reference window.
+#         detection_bpmn_text (str): The BPMN text for the detection window.
 
-    Returns:
-        str: The updated prompt for BPMN analysis.
-    """
+#     Returns:
+#         str: The updated prompt for BPMN analysis.
+#     """
 
-    # Add BPMN diagrams to prompt
-    llm_instructions["instructions_bpmn_analysis"] += (
-    ''' 
-    \n### BPMN diagrams ###
-    - The BPMN before the concept drift: {0}. \n
-    - The BPMN after the concept drift: {1}. \n
+#     # Add BPMN diagrams to prompt
+#     llm_instructions["instructions_bpmn_analysis"] += (
+#     ''' 
+#     \n### BPMN diagrams ###
+#     - The BPMN before the concept drift: {0}. \n
+#     - The BPMN after the concept drift: {1}. \n
 
-    ''').format(reference_bpmn_text, detection_bpmn_text)
+#     ''').format(reference_bpmn_text, detection_bpmn_text)
 
-    return llm_instructions["instructions_bpmn_analysis"]
+#     return llm_instructions["instructions_bpmn_analysis"]
 
 
-def llm_classification_prompt(llm_instructions, change_informations, reference_bpmn_text, detection_bpmn_text, llm_bpmn_analysis_response):
-    """
-    Create the classification prompt for the LLM based on the changes and BPMN diagrams.
+# def llm_classification_prompt(llm_instructions, change_informations, reference_bpmn_text, detection_bpmn_text, llm_bpmn_analysis_response):
+#     """
+#     Create the classification prompt for the LLM based on the changes and BPMN diagrams.
 
-    Args:
-        llm_instructions (dict): The LLM instructions dictionary.
-        change_informations (dict): A dictionary with information about changes (new/deleted transitions and activities).
-        reference_bpmn_text (str): The BPMN text for the reference window.
-        detection_bpmn_text (str): The BPMN text for the detection window.
-        llm_bpmn_analysis_response (str): The response from the LLM for BPMN analysis.
+#     Args:
+#         llm_instructions (dict): The LLM instructions dictionary.
+#         change_informations (dict): A dictionary with information about changes (new/deleted transitions and activities).
+#         reference_bpmn_text (str): The BPMN text for the reference window.
+#         detection_bpmn_text (str): The BPMN text for the detection window.
+#         llm_bpmn_analysis_response (str): The response from the LLM for BPMN analysis.
 
-    Returns:
-        str: The complete prompt for classification.
-    """
+#     Returns:
+#         str: The complete prompt for classification.
+#     """
 
-    # Get the prompt
-    prompt = llm_instructions["instructions_classification"] 
+#     # Get the prompt
+#     prompt = llm_instructions["instructions_classification"] 
 
-    # Add BPMN Diagrams Comparison Analysis to prompt
-    prompt += (
-        ''' 
-        \n### BPMN Diagrams Comparison Analysis ###
-        {0}. \n
+#     # Add BPMN Diagrams Comparison Analysis to prompt
+#     prompt += (
+#         ''' 
+#         \n### BPMN Diagrams Comparison Analysis ###
+#         {0}. \n
 
-        ''').format(llm_bpmn_analysis_response)
+#         ''').format(llm_bpmn_analysis_response)
     
 
-    ### Add Transition and Activities Changes List and Control-flow Change Patterns to prompt depending on conditions
+#     ### Add Transition and Activities Changes List and Control-flow Change Patterns to prompt depending on conditions
     
-    # If there is at least a new or deleted activity, then suggest SRE, PRE, CRE, or RP
-    if change_informations['New activities added to the process'] != ['None'] or change_informations['Deleted activities from the process'] != ['None']:
+#     # If there is at least a new or deleted activity, then suggest SRE, PRE, CRE, or RP
+#     if change_informations['New activities added to the process'] != ['None'] or change_informations['Deleted activities from the process'] != ['None']:
         
-        prompt += (
-        ''' 
-        \n### Transition and Activities Changes List ###
-        \n'New transitions added to the process': {0}.
-        \n'Deleted transitions from the process': {1}.
-        \n'New activities added to the process': {2}.
-        \n'Deleted activities from the process': {3}.
+#         prompt += (
+#         ''' 
+#         \n### Transition and Activities Changes List ###
+#         \n'New transitions added to the process': {0}.
+#         \n'Deleted transitions from the process': {1}.
+#         \n'New activities added to the process': {2}.
+#         \n'Deleted activities from the process': {3}.
 
-        ''').format(change_informations['New transitions added to the process']
-                    , change_informations['Deleted transitions from the process']
-                    , change_informations['New activities added to the process']
-                    , change_informations['Deleted activities from the process'])
+#         ''').format(change_informations['New transitions added to the process']
+#                     , change_informations['Deleted transitions from the process']
+#                     , change_informations['New activities added to the process']
+#                     , change_informations['Deleted activities from the process'])
         
-        prompt += (
-        ''' 
-        \n### Control-flow Change Patterns ###\n
-        ''')
-        prompt += (
-            llm_instructions['controlflow_change_patterns']['sre_instructions'] 
-            + llm_instructions['controlflow_change_patterns']['pre_instructions'] 
-            + llm_instructions['controlflow_change_patterns']['cre_instructions'] 
-            + llm_instructions['controlflow_change_patterns']['rp_instructions'] 
-        )  
+#         prompt += (
+#         ''' 
+#         \n### Control-flow Change Patterns ###\n
+#         ''')
+#         prompt += (
+#             llm_instructions['controlflow_change_patterns']['sre_instructions'] 
+#             + llm_instructions['controlflow_change_patterns']['pre_instructions'] 
+#             + llm_instructions['controlflow_change_patterns']['cre_instructions'] 
+#             + llm_instructions['controlflow_change_patterns']['rp_instructions'] 
+#         )  
 
-    # If the changes don't involve addition or deletion of activities but rather addition or deletion of transitions between existing activities, then suggest SM, CM, PM, or SW, CF, PL, LP,CD,  CB, or CP
-    elif change_informations['New transitions added to the process'] != ['None'] or change_informations['Deleted transitions from the process'] != ['None']:
+#     # If the changes don't involve addition or deletion of activities but rather addition or deletion of transitions between existing activities, then suggest SM, CM, PM, or SW, CF, PL, LP,CD,  CB, or CP
+#     elif change_informations['New transitions added to the process'] != ['None'] or change_informations['Deleted transitions from the process'] != ['None']:
         
-        prompt += (
-        ''' 
-        \n### Transition and Activities Changes List ###
-        \n'New transitions added to the process': {0}.
-        \n'Deleted transitions from the process': {1}.
-        \n'New activities added to the process': {2}.
-        \n'Deleted activities from the process': {3}.
+#         prompt += (
+#         ''' 
+#         \n### Transition and Activities Changes List ###
+#         \n'New transitions added to the process': {0}.
+#         \n'Deleted transitions from the process': {1}.
+#         \n'New activities added to the process': {2}.
+#         \n'Deleted activities from the process': {3}.
 
-        ''').format(change_informations['New transitions added to the process']
-                    , change_informations['Deleted transitions from the process']
-                    , change_informations['New activities added to the process']
-                    , change_informations['Deleted activities from the process'])
+#         ''').format(change_informations['New transitions added to the process']
+#                     , change_informations['Deleted transitions from the process']
+#                     , change_informations['New activities added to the process']
+#                     , change_informations['Deleted activities from the process'])
 
-        prompt += (
-        ''' 
-        \n### Control-flow Change Patterns ###\n
-        ''')
+#         prompt += (
+#         ''' 
+#         \n### Control-flow Change Patterns ###\n
+#         ''')
 
-        # Movement Patterns
-        prompt += (llm_instructions['controlflow_change_patterns']['sm_instructions'] 
-                + llm_instructions['controlflow_change_patterns']['cm_instructions'] 
-                + llm_instructions['controlflow_change_patterns']['pm_instructions'] 
-                + llm_instructions['controlflow_change_patterns']['sw_instructions'] 
-        )
+#         # Movement Patterns
+#         prompt += (llm_instructions['controlflow_change_patterns']['sm_instructions'] 
+#                 + llm_instructions['controlflow_change_patterns']['cm_instructions'] 
+#                 + llm_instructions['controlflow_change_patterns']['pm_instructions'] 
+#                 + llm_instructions['controlflow_change_patterns']['sw_instructions'] 
+#         )
 
-        # Gateway Type Changes
-        prompt += (llm_instructions['controlflow_change_patterns']['pl_instructions'] 
-                + llm_instructions['controlflow_change_patterns']['cf_instructions'] 
-        )
+#         # Gateway Type Changes
+#         prompt += (llm_instructions['controlflow_change_patterns']['pl_instructions'] 
+#                 + llm_instructions['controlflow_change_patterns']['cf_instructions'] 
+#         )
 
-        # Synchronization (Parallel involved)
-        prompt += (llm_instructions['controlflow_change_patterns']['cd_instructions'] 
-        )
+#         # Synchronization (Parallel involved)
+#         prompt += (llm_instructions['controlflow_change_patterns']['cd_instructions'] 
+#         )
 
-        # Bypass (XOR involved)
-        prompt += (llm_instructions['controlflow_change_patterns']['cb_instructions'] 
-        )
+#         # Bypass (XOR involved)
+#         prompt += (llm_instructions['controlflow_change_patterns']['cb_instructions'] 
+#         )
 
-        # Loop Fragment Changes
-        prompt += (llm_instructions['controlflow_change_patterns']['lp_instructions'] 
-                   #llm_instructions['controlflow_change_patterns']['cp_instructions'] 
-        )
-
-
-    # If the changes don't involve addition or deletion of activities nor addition or deletion of transitions between existing activities, but rather only changes in the transitions, then is FR
-    else:
-
-        prompt += (
-        ''' 
-        \n### Transition and Activities Changes List ###\n
-        {0}
-
-        ''').format(change_informations)
-
-        prompt += (
-        ''' 
-        \n### Control-flow Change Patterns ###\n
-        ''')
-
-        prompt += (
-            llm_instructions['controlflow_change_patterns']['fr_instructions'] 
-        )
+#         # Loop Fragment Changes
+#         prompt += (llm_instructions['controlflow_change_patterns']['lp_instructions'] 
+#                    #llm_instructions['controlflow_change_patterns']['cp_instructions'] 
+#         )
 
 
-    return prompt
+#     # If the changes don't involve addition or deletion of activities nor addition or deletion of transitions between existing activities, but rather only changes in the transitions, then is FR
+#     else:
+
+#         prompt += (
+#         ''' 
+#         \n### Transition and Activities Changes List ###\n
+#         {0}
+
+#         ''').format(change_informations)
+
+#         prompt += (
+#         ''' 
+#         \n### Control-flow Change Patterns ###\n
+#         ''')
+
+#         prompt += (
+#             llm_instructions['controlflow_change_patterns']['fr_instructions'] 
+#         )
 
 
+#     return prompt
 
-def llm_classification_formatting(characterization_classification):
-    """
-    Format the characterization classification string into a dictionary.
 
-    Args:
-        characterization_classification (str): The characterization classification string.
+# def llm_classification_formatting(characterization_classification):
+#     """
+#     Format the characterization classification string into a dictionary.
 
-    Returns:
-        dict: The formatted classification as a dictionary.
-    """
+#     Args:
+#         characterization_classification (str): The characterization classification string.
 
-    # Finding the start and end of the dictionary string
-    try:
-        start_str = "result_dict = {"
-        end_str = "}"
-        start_index = characterization_classification.find(start_str) + len(start_str) - 1
-        end_index = characterization_classification.find(end_str, start_index) + 1
+#     Returns:
+#         dict: The formatted classification as a dictionary.
+#     """
 
-        return ast.literal_eval(characterization_classification[start_index:end_index].strip())
-    except:
-        return "Classification not in the expected format."
+#     # Finding the start and end of the dictionary string
+#     try:
+#         start_str = "result_dict = {"
+#         end_str = "}"
+#         start_index = characterization_classification.find(start_str) + len(start_str) - 1
+#         end_index = characterization_classification.find(end_str, start_index) + 1
+
+#         return ast.literal_eval(characterization_classification[start_index:end_index].strip())
+#     except:
+#         return "Classification not in the expected format."
 
 
 def llm_characterization_prompt(llm_instructions, reference_transition_matrix, detection_transition_matrix, tmpd_instance):
@@ -1099,7 +1091,7 @@ def llm_characterization_prompt(llm_instructions, reference_transition_matrix, d
     # Add information sources based on configuration
     for source in sources:
         if source == "significant_transition_changes" and hasattr(tmpd_instance, 'significant_transition_changes'):
-            prompt += "\n\n### Significant Transition Changes Analysis ###\n"
+            prompt += "\n\n## Significant Transition Changes Analysis \n"
             if not tmpd_instance.significant_transition_changes.empty:
                 prompt += f"Detailed statistical analysis of {len(tmpd_instance.significant_transition_changes)} significant changes:\n"
                 prompt += tmpd_instance.significant_transition_changes.to_string(index=False)
@@ -1107,69 +1099,46 @@ def llm_characterization_prompt(llm_instructions, reference_transition_matrix, d
                 prompt += "No statistically significant changes detected at the transition level.\n"
         
         elif source == "reference_transition_matrix":
-            prompt += "\n\n### Reference Transition Matrix ###\n"
+            prompt += "\n\n## Reference Transition Matrix \n"
             prompt += reference_transition_matrix.to_string(index=False) if not reference_transition_matrix.empty else "No reference transition matrix available.\n"
         
         elif source == "detection_transition_matrix":
-            prompt += "\n\n### Detection Transition Matrix ###\n"
+            prompt += "\n\n## Detection Transition Matrix \n"
             prompt += detection_transition_matrix.to_string(index=False) if not detection_transition_matrix.empty else "No detection transition matrix available.\n"
         
         elif source == "high_level_changes" and hasattr(tmpd_instance, 'high_level_changes'):
-            prompt += "\n\n### High-Level Changes ###\n"
+            prompt += "\n\n## High-Level Changes \n"
             for key, value in tmpd_instance.high_level_changes.items():
                 prompt += f"{key}: {value}\n"
         
         elif source == "reference_bpmn_text" and hasattr(tmpd_instance, 'reference_bpmn_text'):
-            prompt += "\n\n### Reference Window BPMN Diagram (Process Model) ###\n"
+            prompt += "\n\n## Reference Window BPMN Diagram (Process Model) \n"
             prompt += f"{tmpd_instance.reference_bpmn_text}\n"
         elif source == "detection_bpmn_text" and hasattr(tmpd_instance, 'detection_bpmn_text'):
-            prompt += "\n\n### Detection Window BPMN Diagram (Process Model) ###\n"
+            prompt += "\n\n## Detection Window BPMN Diagram (Process Model) \n"
             prompt += f"{tmpd_instance.detection_bpmn_text}\n"
         
         elif source in llm_instructions:
-            # Generic handler for any additional keys in the YAML file
-            prompt += f"\n\n### {source.replace('_', ' ').title()} ###\n"
-            source_data = llm_instructions[source]
-            
-            if isinstance(source_data, dict):
-                # Handle dictionary structures (like controlflow_change_patterns)
-                for key, value in source_data.items():
-                    if isinstance(value, str):
-                        prompt += f"\n{value}\n"
-                    else:
-                        prompt += f"\n{value}\n"
-            elif isinstance(source_data, list):
-                # Handle list structures
-                for item in source_data:
-                    if isinstance(item, str):
-                        prompt += f"{item}\n"
-                    else:
-                        prompt += f"{item}\n"
-            elif isinstance(source_data, str):
-                # Handle string values
-                prompt += f"{source_data}\n"
-            else:
-                # Handle other data types
-                prompt += f"{source_data}\n"
+            prompt += f"{llm_instructions[source]}\n"
     
     return prompt
 
 
-def llm_characterization_formatting(characterization_response):
-    """
-    Format and structure the characterization response.
+# def llm_characterization_formatting(characterization_response):
+#     """
+#     Format and structure the characterization response.
     
-    Args:
-        characterization_response (str): Raw LLM response for characterization.
+#     Args:
+#         characterization_response (str): Raw LLM response for characterization.
     
-    Returns:
-        dict: Structured characterization analysis.
-    """
-    # For now, return the response as-is
-    # In the future, this could parse the response into structured format
-    return {
-        "raw_response": characterization_response,
-        "analysis_timestamp": pd.Timestamp.now(),
-        "status": "completed"
-    }
+#     Returns:
+#         dict: Structured characterization analysis.
+#     """
+#     # For now, return the response as-is
+#     # In the future, this could parse the response into structured format
+#     return {
+#         "raw_response": characterization_response,
+#         "analysis_timestamp": pd.Timestamp.now(),
+#         "status": "completed"
+#     }
 
