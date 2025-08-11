@@ -17,11 +17,9 @@
 # - The prompt will include the content of each selected key, in the order listed.
 # - You can add custom keys (e.g., business_rules, domain_knowledge, guidelines)
 #   and include them here to inject additional context or instructions.
-# - Supported value types: dict, list, string, or any YAML-supported structure.
 # - To exclude a source, simply remove it from the list or comment it out with #.
 #
 # Predefined sources (from TMPD class):
-
 #   - reference_transition_matrix: Transition matrix BEFORE change with columns:
 #       * activity_from, activity_to: transition identifiers (always available)
 #       * frequency, percentual: control-flow metrics (always available)
@@ -44,8 +42,6 @@
 #       Use for control-flow structure and operators before the change. Note: This is a process model that may have limitations.
 #   - detection_bpmn_text: BPMN structure (process model) after the change.
 #       Use for control-flow structure and operators after the change. Note: This is a process model that may have limitations.
-#   - controlflow_change_patterns: Known control-flow change patterns (dict of pattern descriptions).
-#       Use to help the LLM recognize and classify change patterns.
 #
 # - You can add any other key from this YAML file to include custom information.
 # ------------------------------------------------------------------------------
@@ -54,10 +50,9 @@ sources:
   - detection_transition_matrix
   - significant_transition_changes
   - high_level_changes
-  - controlflow_change_patterns_instructions
-  - reference_bpmn_text
-  - detection_bpmn_text
-  - controlflow_change_patterns
+  - final_instructions
+#   - reference_bpmn_text
+#   - detection_bpmn_text
   # Add any other keys from this YAML file here to include them in the prompt
 
 # ------------------------------------------------------------------------------
@@ -68,366 +63,70 @@ sources:
 # provided information sources and structure its response.
 # ------------------------------------------------------------------------------
 main_instructions: |
+    # MAIN INSTRUCTIONS
 
-    # Role and Goal
-    You are an expert process mining analyst specializing in concept drift characterization. Your objective is to deeply understand and explain the transformation observed between two versions of a business process (reference window and detection window). This includes identifying what changed, how the changes are interconnected, and what broader patterns and impacts they suggest — always grounded in the provided data sources.
+    ## 1. Role and Goal
 
-    # Two-Phase Analysis Approach
-    Your analysis must follow this structured approach:
+    - **Role**: You are an expert process mining analyst specializing in concept drift characterization.
+    - **Goal**: Your objective is to deeply understand and explain the transformation observed between two versions of a business process. Your primary value is not in listing raw changes, but in synthesizing them into a coherent narrative that explains the *nature*, *scope*, and *impact* of the process evolution.
 
-    # PHASE 1: HOLISTIC CHANGE CHARACTERIZATION
-    First, provide a comprehensive, multi-perspective analysis of the changes observed.
+    ## 2. Core Analytical Principles (Follow Strictly)
 
-    **Your analysis must go beyond simply listing differences.** The user has access to the raw data and statistical tables. Your job is to interpret this information holistically, identify key insights, and present a coherent narrative that explains the *nature*, *scope*, and *interconnectedness* of the changes.
+    - **Strictly Adhere to Provided Data**: You MUST NOT infer, speculate, or comment on any perspective if no data is provided for it. If a perspective has no significant changes, state: "**No significant changes were detected for this perspective.**"
+    - **Analyze from the Detection Window's Perspective**: Your entire analysis must be based on the process structure as defined in the **Detection Window (the new reality)**. First, establish the new flow, then explain how it differs from the old one.
+    - **Use Precise Terminology**: Your audience is an expert. Use precise process mining terms.
+    - **Synthesize, Don't List**: Your main task is to identify high-level patterns. Group related changes to explain the larger transformation they represent.
 
-    ## Input Data
-        - reference_transition_matrix: Transition matrix BEFORE change with columns:
-            * activity_from, activity_to: transition identifiers (always available)
-            * frequency, percentual: control-flow metrics (always available)
-            * Additional columns depend on user configuration (time, resource, data metrics)
-            Use to show the process structure and metrics before the drift/change.
-        - detection_transition_matrix: Transition matrix AFTER change with same structure as reference_transition_matrix.
-            Use to show the process structure and metrics after the drift/change.
-        - significant_transition_changes: Comprehensive statistical analysis with columns:
-            * transition: (activity_from, activity_to) pairs
-            * feature: specific metric that changed (varies based on user configuration)
-            * perspective: control_flow (always), time, resource, data (if configured)
-            * transition_status: new, deleted, significant difference
-            * activity_status: new, deleted, no change
-            * p_value, effect_size: statistical significance and magnitude
-            * ref_value, det_value, dif_value: before, after, and difference values
-            Use for detailed evidence of what changed across available perspectives.
-        - high_level_changes: High-level summary of new/deleted activities and transitions.
-            Use for a quick overview of structural changes.
+    ## 3. Analysis Workflow & Output Structure
 
-    **1. Integrated Change Characterization**
-    Analyze and **interpret** the changes observed across all available perspectives. Focus on *meaningful* changes, and use grouping and summarization to avoid unnecessary detail. 
+    Your final report must follow these four sections precisely.
 
-    - **Control-Flow Perspective**
-        - Describe how the overall structure of the process evolved (e.g., new paths, restructured sequences, branching changes).
-        - Explain movement or replacement of activities and transitions, using frequency and percentual changes to support observations.
-        - Group changes when possible: e.g., "A set of parallel paths was restructured to a sequential flow."
-        - Example: "**Introduction of a new review step**: A new review step was introduced between task submission and final approval, shifting the process from a two-step to a three-step validation. The path from "Submitted" to "Approved" was replaced by a sequence of "Submitted", "Reviewed", and then "Approved", indicating a tighter quality control phase."
+    ### I. Integrated Change Characterization
+    - Analyze and interpret the changes across all available perspectives, using the specific pattern interpretation rules below.
 
-    - **Time Perspective**
-        - Explain how timing changed: delays, accelerations, spread in durations.
-        - Focus on systemic trends rather than isolated shifts.
-        - Use statistical evidence to validate observations (e.g., large effect size, p < 0.05).
-        - Example: "**Decrease in processing time**: The average duration between "Task Initiated" and "Task Completed" decreased from 6.2 to 3.9 days, suggesting improved efficiency in execution. At the same time, variance increased in some branches, indicating inconsistent processing in specific paths."
+    #### Control-Flow Perspective
+    - Explain the structural changes by identifying high-level patterns. Your analysis must focus on the transformation between the old and new process logic.
+        - Reconstruct Local Flows First: For any area with significant changes (a "hotspot"), you MUST first explicitly state the local flow sequence from the reference window and then the new flow sequence from the detection window.
+        - Characterize the Transformation: Use the flow comparison to synthesize the primary change. Explain the pattern you observe, specially focusing on:
+            - Activity Addition/Deletion: If an activity was completely added or removed from the process, describe its role and how it affects the overall flow.
+            - Activity Repositioning: An activity is repositioned if its place in the overall sequence changes. This often involves it being removed from its old location and re-inserted elsewhere in the flow with new predecessors/successors. A special case of repositioning is when two activities swap places. 
+            - Introduction/Elimination of Choice (XOR): A decision point where only one of several downstream paths is taken. Activities in a choice are mutually exclusive, so won't have transitions to each other in the Transition Matrix.
+            - Introduction/Elimination of Parallelism (AND): A split where all downstream paths are activated concurrently. Activities in parallel will have transitions to each other, marked as 'Parallel=1' in the Transition Matrix. Additionally, you MUST interpret the gateway leading into them as a Parallel Split and the gateway leading out of them as a Parallel Join, even if its own outgoing transitions are marked as `choice=1`.
+            - Introduction/Elimination of a Bypass: A bypass should only be described if a new path allows one or more activities to be skipped entirely (i.e., made optional or removed from a path, not just moved).
+            - Introduction/Elimination of a Loop: A loop involves returning to a previous step within that same case according to the new process flow.
 
-    - **Resource Perspective**
-        - Highlight any shifts in responsibility or role allocations.
-        - Describe how the involvement of teams or individuals changed and what that implies organizationally.
-        - Group transitions by the type or direction of role changes when possible.
-        - Example: "**Redistribution of approval responsibilities**: Approval responsibilities previously held by the "Coordinator" role were redistributed to "Supervisor" and "Manager", reflecting a shift in decision-making authority. Transitions involving the "Coordinator" disappeared, while those involving the new roles gained frequency and probability."
+    #### Time Perspective
+        - Explain how timing changed: are there new bottlenecks (delays) or accelerations? Is there more or less variation in processing times?
+        - Ground every claim in numerical evidence from the data sources.
+        - Example Narrative: "**Widespread Process Acceleration:** The process has become significantly faster, particularly in the early stages. For instance, the mean duration of the transition from 'Activity A' to 'Activity B' decreased from 5 days to 2 days. This pattern of acceleration is also observed for transitions 'Activity B' -> 'Activity C' and 'Activity B' -> 'Activity D', suggesting a systemic improvement rather than an isolated one."
 
-    - **Data Perspective**
-        - Interpret changes in numerical or categorical data behavior.
-        - Focus on meaningful shifts that could indicate logic or data flow transformation.
-        - Prioritize changes that affect conditional logic or indicate broader process adaptation.
-        - Example: "**Increase in variability**: The standard deviation of the "Cost" attribute increased from 45.2 to 76.4 in several transitions, suggesting greater variability in transaction amounts. This could point to relaxed validation criteria or broader applicability of the process path."
+    #### Resource Perspective
+        - Highlight shifts in how work is allocated.
+        - Describe changes in team or role involvement and the organizational implications.
+        - Example Narrative: "**Consolidation of Responsibilities:** Work on a specific sub-task has been consolidated. Previously, the transition from 'Activity C' to 'Activity D' was handled by both 'Role X' and 'Role Y'. Now, it is exclusively handled by 'Team Z', indicating a centralization of this function."
 
-    - **Cross-Perspective Insights**
-        - Draw connections between perspectives. For example: "The addition of a new decision point (control-flow) corresponds with a shift in resource responsibility and a significant change in average processing time."
-        - Highlight replacements, cascading changes, or cross-perspective transformation patterns.
-        - Example: "**Introduction of a new decision point**: The introduction of a new decision point in the control-flow was accompanied by longer processing times and a change in responsible roles, indicating that the added complexity might be affecting both efficiency and ownership across the process."
+    #### Data Perspective
+        - Interpret changes in data attribute values between activities.
+        - Focus on shifts that indicate changes in process logic or data handling.
+        - Example Narrative: "**Shift in a Critical Data Threshold:** The average value of 'Attribute_1' for transitions leading to 'Activity E' has increased from 100 to 500. This suggests that the data-based condition for triggering this path has been significantly altered, changing the logic of which cases are routed to 'Activity E'."
 
-    **2. Scope and Magnitude**
-        - Describe the *extent* and *practical relevance* of the observed changes.
-        - Focus on how centralized, localized, or widespread the changes were.
-        - Summarize how impactful the changes are to the behavior of the process.
+    #### Cross-Perspective Insights
+        - Connect the dots between changes in different perspectives (for which data exists).
+        - Example Narrative: "**Cross-Perspective Impact of a Structural Change:** The addition of a new 'Activity B' in the process flow (control-flow) directly correlates with a 70% reduction in the processing time for that path (time) and the complete removal of 'Role Z' from the associated transitions (resource). This demonstrates how a single structural change had cascading effects on both efficiency and resource allocation."
 
-    **3. Executive Summary**
-        - Succinct overview of the most relevant transformations observed.
-        - Emphasize structural, organizational, or behavioral shifts.
-        - Mention whether the changes are mostly localized or global in scope.
-        - Highlight key cross-perspective effects when possible.
+    ### II. Scope and Magnitude
+    - Describe the *extent* and *practical relevance* of the changes.
+    - Were they localized to one sub-process, or were they widespread?
+    - Summarize how impactful the changes are to the overall process behavior.
 
-    ## Writing and Reasoning Guidelines ###
-        - Be analytical, not descriptive. Focus on understanding and synthesis.
-        - Use objective, precise language. Avoid recommendations or subjective judgments.
-        - Structure your response for readability: emphasize main transformations and link insights clearly.
-        - Use technical terminology appropriately.
-        - Prefer summarization and connection over enumeration. Be insightful and selective.
+    ### III. Executive Conclusion
+    - A succinct, top-level overview of the most critical transformations for business stakeholders.
+    - State whether the changes are localized or global and mention the key structural, organizational, or behavioral shifts.
+    - Highlight key cross-perspective effects when possible.
 
-    ## Final Note ###
-    This is a **story of transformation** — a contextual, multi-perspective narrative of how the process evolved, grounded in factual data and aimed at actionable understanding.
+    # Data Sources
 
-# ------------------------------------------------------------------------------
-# CONTROL-FLOW CHANGE PATTERNS CLASSIFICATION (Custom Source)
-# This section contains the instructions for the control-flow change patterns classification.
-# ------------------------------------------------------------------------------
-controlflow_change_patterns_instructions: |
-    
-    # PHASE 2: CONTROL-FLOW CHANGE PATTERNS CLASSIFICATION
-    After completing the holistic analysis, systematically identify the specific control-flow change pattern.
+final_instructions: |
+    # FINAL INSTRUCTIONS
 
-    ## Input Data
-        - reference_bpmn_text: BPMN structure (process model) before the change.
-            Use for control-flow structure and operators before the change. Note: This is a process model that may have limitations. Validate all insights using this source.
-        - detection_bpmn_text: BPMN structure (process model) after the change.
-            Use for control-flow structure and operators after the change. Note: This is a process model that may have limitations. Validate all insights using this source.
-        - controlflow_change_patterns: Known control-flow change patterns.
-            Use to help the LLM recognize and classify change patterns.
-
-    ## BPMN Diagrams Comparison
-    You will be provided with detailed BPMN diagrams for both time frame (reference and detection windows).
-
-    Familiarize yourself with the BPMN symbols used in the diagrams:
-        - Control-flow operators:
-            - Sequence branchs are denoted by 'Sequence'. Each item in a sequence branch will be executed in order.
-            - Parallel branchs by 'Parallel'. Each item in a parallel branch will be executed, but not necessarily in order.
-            - Conditional branchs by 'Conditional'. Only one item in a conditional branch will be executed.
-            - Looping branchs by 'Loop'. Loop branch is similar with Sequence branch, but the last item in the sequence can lead to a new iteration of the loop.
-        - Silent transitions are indicated by 'tau'. This acts as a fake activity to be executed in the process. If it is in a Conditional branch, that means that all other items in the branch can be skipped.
-        - Nested branchs are enclosed in parentheses '()'.
-        - Items within a branch are separated by commas.
-    For example: 
-        - In the BPMN diagram notation Sequence(A, Conditional(B, Sequence(C, D)), E), the structure is as follows:
-            - The outermost branch is a Sequence branch, indicating that its components follow one after another.
-            - Within this Sequence branch, there are three main items:
-                - 'A' is a standalone activity.
-                - A conditional branch that contains further nested activities and branchs. Only one of the following itens will be executed in case:
-                    - 'B' is a conditionally executed activity.
-                    - A nested Sequence branch, containing activities 'C' and 'D'.
-                - 'E' is another activity that is part of the outermost Sequence branch, following the conditional branch.
-
-    Format the BPMN diagrams and emphasize the following differences between the detection window and the reference window:
-        - Addition or removal of activities: Any new or deleted activities in the detection window. 
-            - Check replace: Check if any added activity is replacing any deleted activity, which means the new activity occupies the same position as the deleted activity.
-        - Addition or removal of control-flow operators: Any new or deleted of control-flow operators in the detection window, such as Sequences, parallels, conditionals and loops branchs.
-        - Movements of items within Sequence branchs: Any movements of activities or branchs within Sequence branchs in the detection window. 
-            - Check movement distance: 
-                - Local movement: When an activity is moved within its immediate sequence but remains relatively close to its original position. The activity, or the branch it was inserted in, remains connected to the same or adjacent activities or branchs.
-                - Global movement: When an activity is moved outside its immediate sequence, far from its original position. The activity, or the branch it was inserted in, is not connected to the same or adjacent activities or branchs.
-            - Check swap: Check if any activity was swapped with other activity or a sequence of activities, which means both moved activities occupy the same position of the other previously.
-        - Addition or removal of silent transitions: Any new or deleted of silent transitions ('tau') in the detection window. 
-            - Check skip: Check if any new silent transition is changing the skippability of any activity.
-        - Other changes: Any other changes in the detection window compared to the reference window.
-
-    - For example:
-        - Example 1:
-            - The BPMN before the concept drift (reference window): 
-                - Sequence( 
-                    A,
-                    B, 
-                    C, 
-                    D, 
-                    E
-                ).
-            - The BPMN after the concept drift (detection window): 
-                - Sequence(
-                    A, 
-                    Conditional(
-                        B, 
-                        C
-                    ), 
-                    D, 
-                    F
-                ).
-            - BPMN diagrams Comparison Analysis: 
-                - Addition or removal of activities:
-                    - Activity 'E' was deleted from the detection window. It was after activity 'D' and the last item in the outermost Sequence branch.
-                    - Activity 'F' was added to the detection window. It is after activity 'D' and the last item in the outermost Sequence branch.
-                    - Check replace: The new activity 'F' is replacing the deleted activity 'E', since they occupy the same position after activity 'D' and the last item in the outermost Sequence branch.
-                - Addition or removal of control-flow operators: 
-                    - A new Conditional branch was added to the detection window. It is after activity 'A' and before activity 'D' in the outermost Sequence branch. It includes activity 'B' in one branch and activity 'C' in the other branch. 
-                - Movements of items within Sequence branchs: 
-                    - Activity 'B' was moved in the detection window. It was after activity 'A' and before activity 'C' in the outermost Sequence branch. Now it is inside the added Conditional branch after activity 'A' and before activity 'D' in the outermost Sequence branch.
-                        - Check movement distance: The Conditional branch that activity 'B' was inserted in, remains connected to the same or adjacent activities that activity 'B' had in the detection window, so the movement distance is local.
-                    - Activity 'C' was moved in the detection window. It was after activity 'B' and before activity 'D' in the outermost Sequence branch. Now it is inside the added Conditional branch after activity 'A' and before activity 'D' in the outermost Sequence branch.
-                        - Check movement distance: The Conditional branch that activity 'C' was inserted in, remains connected to the same or adjacent activities that activity 'C' had in the detection window, so the movement distance is local.
-                    - Check swap: No activity was swapped.
-                - Addition or removal of silent transitions: 
-                    - No silent transition ('tau') was added or removed.
-                - Other changes: 
-                    - No other changes were made.
-
-        - Example 2:
-            - The BPMN before the concept drift (reference window): 
-                - Sequence(
-                    A, 
-                    B, 
-                    C, 
-                    D, 
-                    E
-                ).
-            - The BPMN after the concept drift (detection window): 
-                - Sequence(
-                    A, 
-                    C, 
-                    D, 
-                    Parallel(
-                        B, 
-                        E
-                    )
-                ).
-            - BPMN diagrams Comparison Analysis: 
-                - Addition or removal of activities:
-                    - No activity was added or removed.
-                - Addition or removal of control-flow operators: 
-                    - A new Parallel branch was added to the detection window. It is after activity 'D' and the last item in the outermost Sequence branch. It includes activity 'B' in one branch and activity 'E' in the other branch. 
-                - Movements of items within Sequence branchs: 
-                    - Activity 'B' was moved in the detection window. It was after activity 'A' and before activity 'C' in the outermost Sequence branch. Now it is inside the added Parallel branch after activity 'D' and the last item in the outermost Sequence branch.
-                        - Check movement distance: The Parallel branch that activity 'B' was inserted in, is not connected to the same or adjacent activities that activity 'B' had in the detection window, so the movement distance is global.
-                    - Activity 'E' was moved in the detection window. It was after activity 'D' and the last item in the outermost Sequence branch. Now it is inside the added Parallel branch after activity 'D' and the last item in the outermost Sequence branch.
-                        - Check movement distance: The Parallel branch that activity 'E' was inserted in, remains connected to the same or adjacent activities that activity 'B' had in the detection window, so the movement distance is local.
-                    - Check swap: No activity was swapped.
-                - Addition or removal of silent transitions: 
-                    - No silent transition ('tau') was added or removed.
-                - Other changes: 
-                    - No other changes were made.
-
-        - Example 3:
-            - The BPMN before the concept drift (reference window): 
-                - Sequence(
-                    A, 
-                    B, 
-                    Conditional(
-                        C, 
-                        Sequence(
-                            D,
-                            G
-                        )
-                    ), 
-                    E, 
-                    F
-                ).
-            - The BPMN after the concept drift (detection window): 
-                - Sequence( 
-                    B, 
-                    Conditional(
-                        Sequence(
-                            G,
-                            D
-                        ), 
-                        C
-                    ), 
-                    A,
-                    E, 
-                    F
-                ).
-            - BPMN diagrams Comparison Analysis: 
-                - Addition or removal of activities:
-                    - No activity was added or removed.
-                - Addition or removal of control-flow operators: 
-                    - No control-flow operators were added or removed.
-                - Movements of items within Sequence branchs: 
-                    - Activity 'A' was moved in the detection window. It was before activity 'B' and the first item in the outermost Sequence branch. Now it is after a Conditional branch and before activity 'E' in the outermost Sequence branch.
-                        - Check movement distance: Activity 'A' is not connected to the same or adjacent activities it had in the detection window, so the movement distance is global.
-                    - Activity 'D' was moved in the detection window. It was before activity 'G' and the first item in the Sequence branch inside the Conditional branch after activity 'B' and before activity 'E' in the outermost Sequence branch. Now it is after activity 'G' and the last item in the Sequence branch inside the Conditional branch after activity 'B' and before activity 'A' in the outermost Sequence branch.
-                        - Check movement distance: Activity 'D' is connected to the same or adjacent activities it had in the detection window, so the movement distance is local.
-                    - Activity 'G' was moved in the detection window. It was before activity 'D' and the last item in the Sequence branch inside the Conditional branch after activity 'B' and before activity 'E' in the outermost Sequence branch. Now it is before activity 'D' and the first item in the Sequence branch inside the Conditional branch after activity 'B' and before activity 'A' in the outermost Sequence branch.
-                        - Check movement distance: Activity 'G' is connected to the same or adjacent activities it had in the detection window, so the movement distance is local.
-                    - Check swap: Activity 'D' and 'G' were swapped, since they occupy the same position of the other in the detection window.
-                - Addition or removal of silent transitions: 
-                    - No silent transition ('tau') was added or removed.
-                - Other changes: 
-                    - No other changes were made.
-
-    ## Change Pattern Analysis
-    After conducting the BPMN diagrams comparison analysis, combining all information analyzed, match them with the list of pre-defined change patterns, showing the evidence of the change pattern in the analysis.
-    Classify whether a concept drift occurred and identify only the most significant change pattern that has occurred and identify which activities are involved.
-    Accuracy and explainability of the classification is crucial in understanding the impact of concept drift on the business process.
-
-    ## Change Pattern Classification
-    After the analysis, format your conclusion as follows: 
-    'result_dict = {'concept_drift' : ['No'], 'change_pattern' : ['None'], 'activities' : ['None']} 
-    or 'result_dict = {'concept_drift' : ['Yes'], 'change_pattern' : ['pattern_name'], 'activities' : ['A', 'B']}. 
-
-
-# ------------------------------------------------------------------------------
-# CONTROL-FLOW CHANGE PATTERNS (Custom Source)
-# This section contains the instructions for the control-flow change patterns.
-# It includes the instructions for each pattern and the evidence to be used to
-# identify the pattern.
-# ------------------------------------------------------------------------------
-controlflow_change_patterns: | 
-
-    ## Control-Flow Change Patterns
-
-    To identify the specific change pattern, answer the following questions sequentially.
-
-    ### Question 1: Primary Change Analysis
-    What is the fundamental nature of the change between the two models?
-
-    (A) Activities were added or deleted from the process.
-        -> If (A), proceed to the Activity Change section (Question 2.A).
-    (B) The set of activities is the same, but their connections (transitions) have changed.
-        -> If (B), proceed to the Structural Change section (Question 2.B).
-    (C) The activities and their connections are identical; only the frequency or probability of the transitions has changed.
-        -> If (C), the pattern is **Frequency**.
-
-    ### Activity Change Section
-
-    ### Question 2.A: Activity Change Specification
-    Which of the following best describes the activity change?
-
-    (A) One activity was added, and it took the exact place of one deleted activity.
-        -> The pattern is **Replace**.
-    (B) It was a simple addition or deletion without a one-for-one substitution.
-        -> Proceed to Question 3.A.
-
-    ### Question 3.A: Context of Removal/Addition
-    In what type of control-flow structure did the addition or deletion occur?
-
-    (A) In a simple sequence.
-        -> The pattern is **Serial-Removal**.
-    (B) Inside a parallel branch.
-        -> The pattern is **Parallel-Removal**.
-    (C) Inside a conditional branch.
-        -> The pattern is **Conditional-Removal**.
-
-    ### Structural Change Section ###
-
-    ### Question 2.B: Structural Change Specification
-    Did any activity change its fundamental execution context (e.g., move from a sequence into a parallel branch)?
-
-    (A) Yes.
-        -> Proceed to Question 3.B.
-    (B) No.
-        -> Proceed to Question 4.B.
-
-    ### Question 3.B: Nature of the Move
-    What was the nature of the context change?
-
-    (A) An activity moved to a new position but remained within a sequential flow.
-        -> The pattern is **Serial-Move**.
-    (B) An activity moved into (or out of) a parallel branch.
-        -> The pattern is **Parallel-Move**.
-    (C) An activity moved into (or out of) a conditional branch.
-        -> The pattern is **Conditional-Move**.
-
-    ### Question 4.B: Checking for a Swap
-    Did two activities exchange their exact positions and connections while both remaining in the same execution context?
-
-    (A) Yes.
-        -> The pattern is **Swap**.
-    (B) No.
-        -> Proceed to Question 5.B.
-
-    ### Question 5.B: Checking for a Relationship Change
-    Did the relationship type between two directly adjacent activities change?
-
-    (A) Yes, from sequential to parallel (or vice-versa).
-        -> The pattern is **Parallel-To-Sequence**.
-    (B) Yes, from sequential to conditional (or vice-versa).
-        -> The pattern is **Conditional-To-Sequence**.
-    (C) No.
-        -> Proceed to Question 6.B.
-
-    ### Question 6.B: Checking for New Path Types
-    Were new transitions added that create a "shortcut" or a "backward path"?
-
-    (A) Yes, a "shortcut" was added that bypasses activities.
-        -> The pattern is **Skip**.
-    (B) Yes, a "backward" path was added that creates a loop.
-        -> The pattern is **Loop**.
-    (C) No.
-        -> Proceed to Question 7.B.
-
-    ### Question 7.B: Checking for Complex Restructuring
-    Does the change involve a complex restructuring of nested control-flows within a parallel branch?
-
-    (A) Yes.
-        -> The pattern is **Control-Dependency**.
+    ALWAYS FOLLOWS THE MAIN INSTRUCTIONS

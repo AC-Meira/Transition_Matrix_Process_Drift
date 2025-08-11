@@ -9,6 +9,90 @@ import pandas as pd
 import numpy as np
 import datetime
 from scipy.stats import entropy
+from collections import defaultdict
+import networkx as nx
+
+
+def get_feature_alpha_relations(TM_df_original, control_flow_feature=None,
+                                max_loop_len: int = 4):
+    """
+    Returns: DataFrame with columns
+             ['causality', 'parallel', 'choice', 'self_loop', 'loop']
+             where 'loop' = any edge that belongs to a self-loop OR to a
+             simple cycle of length 2-max_loop_len.
+    """
+    TM_df = TM_df_original.copy().reset_index()
+    TM_df['prob'] = (
+        TM_df.groupby('activity_from')['frequency']
+              .transform(lambda x: x / x.sum())
+    )
+
+    transitions = set(zip(TM_df['activity_from'], TM_df['activity_to']))
+    out_map = TM_df.groupby('activity_from')['activity_to'].apply(set).to_dict()
+    prob_map = TM_df.set_index(['activity_from', 'activity_to'])['prob'].to_dict()
+    # ------------------------------------------------------------------#
+    # -------- 1. EXISTING RELATIONS (unchanged) ----------------------- #
+    # ------------------------------------------------------------------#
+    causality, parallel, choice, self_loop = set(), set(), set(), set()
+
+    # causality ---------------------------------------------------------
+    for a, outs in out_map.items():
+        if len(outs) == 1:
+            b = next(iter(outs))
+            if a != b and prob_map[(a, b)] == 1.0:
+                causality.add((a, b))
+
+    # choice ------------------------------------------------------------
+    for a, outs in out_map.items():
+        if len(outs) > 1:
+            choice.update({(a, b) for b in outs if a != b})
+
+    # parallel ----------------------------------------------------------
+    for a, b in transitions:
+        if a != b and (b, a) in transitions:
+            if (a, b) not in causality and (b, a) not in causality:
+                parallel.add((a, b))
+
+    # self‑loops --------------------------------------------------------
+    for a, b in transitions:
+        if a == b:
+            self_loop.add((a, b))
+
+    # ------------------------------------------------------------------#
+    # -------- 2.  CYCLE‑BASED LOOPS  (2‑4 nodes) ---------------------- #
+    # ------------------------------------------------------------------#
+    G = nx.DiGraph()
+    G.add_edges_from(transitions)
+
+    cycle_edges = set()
+    for cycle in nx.simple_cycles(G):
+        if 2 <= len(cycle) <= max_loop_len:
+            cycle_edges.update(
+                (cycle[i], cycle[(i + 1) % len(cycle)]) for i in range(len(cycle))
+            )
+
+    # unified loop indicator (include 1‑node self‑loops)
+    all_loops = cycle_edges | self_loop
+
+    # remove overlaps ---------------------------------------------------
+    causality -= parallel
+    choice -= causality | parallel
+    all_loops -= parallel
+
+    # ------------------------------------------------------------------#
+    # -------- 3.  WRITE BACK TO DATAFRAME ---------------------------- #
+    # ------------------------------------------------------------------#
+    # fast vectorised assignment – avoids 6× .apply()
+    idx = list(zip(TM_df['activity_from'], TM_df['activity_to']))
+    TM_df['causality']  = np.fromiter((e in causality  for e in idx), int)
+    TM_df['parallel']   = np.fromiter((e in parallel   for e in idx), int)
+    TM_df['choice']     = np.fromiter((e in choice     for e in idx), int)
+    TM_df['loop']       = np.fromiter((e in all_loops  for e in idx), int)
+
+    return TM_df.set_index(['activity_from', 'activity_to'])[['causality', 'parallel', 'choice', 'loop']]
+
+
+
 
 def get_feature_probability(TM_df_original, control_flow_feature):
     """
@@ -32,83 +116,6 @@ def get_feature_probability(TM_df_original, control_flow_feature):
     TM_df[control_flow_feature] = TM_df.set_index("activity_from")[["frequency"]].div(TM_df_groupby).reset_index()["frequency"]
 
     return TM_df.set_index(['activity_from','activity_to'])[[control_flow_feature]]
-
-
-def get_feature_causality(TM_df_original, control_flow_feature):
-    """
-    Identifies causal relationships between activities based on direct succession.
-
-    Args:
-        TM_df_original (DataFrame): Transition matrix.
-        control_flow_feature (str): Name of the control flow feature to compute.
-
-    Returns:
-        DataFrame: Transition matrix with the computed causality feature.
-    """
-
-    TM_df = TM_df_original.copy()
-
-    # Direct succession: x>y if for some case x is directly followed by y
-    TM_df['direct_succession'] = np.where(TM_df['frequency']>0, 1, 0)
-    
-    # Opposite direction: if y>x
-    TM_df_inverted = TM_df.reset_index()[['activity_from','activity_to','direct_succession']]
-    TM_df_inverted.columns = ['activity_to','activity_from', 'opposite_direction']
-    TM_df_inverted.set_index(['activity_from','activity_to'], inplace=True)
-    TM_df = pd.merge(TM_df, TM_df_inverted, on=['activity_from', 'activity_to'], how='left')
-
-    # Causality: x→y if x>y and not y>x
-    TM_df[control_flow_feature] = np.where((TM_df['direct_succession']==1) & (TM_df['opposite_direction']!=1), 1, 0)
-
-    return TM_df[[control_flow_feature]]
-
-def get_feature_parallel(TM_df_original, control_flow_feature):
-
-    """...
-    Args:
-        'frequency_gtest' : {'process_feature':'frequency', 'method':'g_test', 'contingency_matrix_sum_value' : '5', 'remove_zeros':'True'}
-        , 'frequency_cramersv' : {'process_feature':'frequency', 'method':'cramers_v', 'contingency_matrix_sum_value' : '5', 'remove_zeros':'True'}
-    """
-
-    TM_df = TM_df_original.copy()
-
-    # Direct succession: x>y if for some case x is directly followed by y
-    TM_df['direct_succession'] = np.where(TM_df['frequency']>0, 1, 0)
-    
-    # Opposite direction: if y>x
-    TM_df_inverted = TM_df.reset_index()[['activity_from','activity_to','direct_succession']]
-    TM_df_inverted.columns = ['activity_to','activity_from', 'opposite_direction']
-    TM_df_inverted.set_index(['activity_from','activity_to'], inplace=True)
-    TM_df = pd.merge(TM_df, TM_df_inverted, on=['activity_from', 'activity_to'], how='left')
-    
-    # Parallel: x||y if x>y and y>x
-    TM_df[control_flow_feature] = np.where((TM_df['direct_succession']==1) & (TM_df['opposite_direction']==1), 1, 0)
-
-    return TM_df[[control_flow_feature]]
-
-def get_feature_choice(TM_df_original, control_flow_feature):
-
-    """...
-    Args:
-        'frequency_gtest' : {'process_feature':'frequency', 'method':'g_test', 'contingency_matrix_sum_value' : '5', 'remove_zeros':'True'}
-        , 'frequency_cramersv' : {'process_feature':'frequency', 'method':'cramers_v', 'contingency_matrix_sum_value' : '5', 'remove_zeros':'True'}
-    """
-
-    TM_df = TM_df_original.copy()
-
-    # Direct succession: x>y if for some case x is directly followed by y
-    TM_df['direct_succession'] = np.where(TM_df['frequency']>0, 1, 0)
-    
-    # Opposite direction: if y>x
-    TM_df_inverted = TM_df.reset_index()[['activity_from','activity_to','direct_succession']]
-    TM_df_inverted.columns = ['activity_to','activity_from', 'opposite_direction']
-    TM_df_inverted.set_index(['activity_from','activity_to'], inplace=True)
-    TM_df = pd.merge(TM_df, TM_df_inverted, on=['activity_from', 'activity_to'], how='left')
-    
-    # Choice: x#y if not x>y and not y>x and not x--->y
-    TM_df[control_flow_feature] = np.where((TM_df['direct_succession']!=1) & (TM_df['opposite_direction']!=1), 1, 0)
-
-    return TM_df[[control_flow_feature]]
 
 
 def get_feature_time_avg(TM_df_original, log_transition_original, method, time_feature):

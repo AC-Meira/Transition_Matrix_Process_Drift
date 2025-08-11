@@ -812,16 +812,36 @@ def llm_call_response(llm_company, llm_model, llm, user_prompt):
     """
     if llm_company == "openai":
 
-        response = llm.chat.completions.create(
-            temperature=0
-            , top_p=0.000000000000001
-            , seed=42
-            , model=llm_model
-            , messages=[
-            # {"role": "system", "content": system_content},
-            {"role": "user", "content": user_prompt}
-            ]
-        )
+        if llm_model in ["o3-mini", "o4-mini"]:
+            # For o3-mini, we use the chat completions API
+            response = llm.chat.completions.create(
+                seed=42
+                , reasoning_effort="high"
+                , model=llm_model
+                , messages=[
+                    {"role": "user", "content": user_prompt}
+                ]
+            )
+        elif llm_model in ["gpt-5"]:
+            # For o3 and o4, we use the chat completions API with temperature and top_p set to 0
+            response = llm.chat.completions.create(
+                seed=42
+                , model=llm_model
+                , messages=[
+                    {"role": "user", "content": user_prompt}
+                ]
+            )
+        else:
+            response = llm.chat.completions.create(
+                temperature=0
+                , top_p=0.000000000000001
+                , seed=42
+                , model=llm_model
+                , messages=[
+                # {"role": "system", "content": system_content},
+                {"role": "user", "content": user_prompt}
+                ]
+            )
 
         return response.choices[0].message.content
     
@@ -1115,11 +1135,11 @@ def llm_characterization_prompt(llm_instructions, reference_transition_matrix, d
             prompt += "\n\n## Reference Window BPMN Diagram (Process Model) \n"
             prompt += f"{tmpd_instance.reference_bpmn_text}\n"
         elif source == "detection_bpmn_text" and hasattr(tmpd_instance, 'detection_bpmn_text'):
-            prompt += "\n\n## Detection Window BPMN Diagram (Process Model) \n"
+            prompt += "\n\n# Detection Window BPMN Diagram (Process Model) \n"
             prompt += f"{tmpd_instance.detection_bpmn_text}\n"
         
         elif source in llm_instructions:
-            prompt += f"{llm_instructions[source]}\n"
+            prompt += f"\n{llm_instructions[source]}\n"
     
     return prompt
 

@@ -61,6 +61,7 @@ class TMPD:
         self.timestamp_format = timestamp_format
         self.other_columns_keys = other_columns_keys if other_columns_keys is not None else []
         self.event_log = event_log.copy()
+        self.alpha_relations = None
 
     def run_transition_log(self, replace_spaces_in_activities: bool = True) -> None:
         """
@@ -214,13 +215,27 @@ class TMPD:
         self.resource_features = resource_features if resource_features is not None else {}
         self.data_features = data_features if data_features is not None else {}
 
-    def run_process_representation(self, transition_log_sample_original: pd.DataFrame) -> None:
+    def run_process_representation(self, transition_log_sample_original: pd.DataFrame, control_flow_features: Optional[set] = None, time_features: Optional[dict] = None, resource_features: Optional[dict] = None, data_features: Optional[dict] = None) -> None:
         """
         Executes the process representation analysis.
         
         Args:
             transition_log_sample_original (pd.DataFrame): Original transition log sample.
+            control_flow_features (set, optional): Set of control flow features to include. Defaults to {'frequency', 'probability'}.
+            time_features (dict, optional): Dictionary of time-related features. Defaults to {}.
+            resource_features (dict, optional): Dictionary of resource-related features. Defaults to {}.
+            data_features (dict, optional): Dictionary of data-related features. Defaults to {}.
         """
+        # Set the features
+        if control_flow_features is None:
+            control_flow_features = self.control_flow_features
+        if time_features is None:
+            time_features = self.time_features
+        if resource_features is None:
+            resource_features = self.resource_features
+        if data_features is None:
+            data_features = self.data_features
+
         # Create a copy of the original transition log
         transition_log = transition_log_sample_original.copy()
         
@@ -244,16 +259,34 @@ class TMPD:
             "percentual": process_representation_df[["percentual"]]
         }
 
-        # Add control-flow features
-        for control_flow_feature in self.control_flow_features - {'frequency', 'percentual'}:
+        # Identify alpha relations
+        alpha_relations = {'causality', 'parallel', 'choice', 'loop'}
+        requested_alpha_features = control_flow_features & alpha_relations
+        normal_features = control_flow_features - alpha_relations - {'frequency', 'percentual'}
+
+        # Add control-flow features (excluding alpha relations)
+        for control_flow_feature in normal_features:
             try:
                 process_features_dict[control_flow_feature] = getattr(TMPD_process_features, "get_feature_" + control_flow_feature)(process_representation_df, control_flow_feature)
             except Exception as e:
                 print("Error in control_flow_feature representation: ", control_flow_feature)
                 print("Error: ", e)
 
+        # Add alpha relations in one call if needed
+        if requested_alpha_features:
+            try:
+                alpha_df = TMPD_process_features.get_feature_alpha_relations(process_representation_df)
+                # Only keep requested columns (convert set to sorted list for indexing)
+                alpha_cols = [col for col in ['causality', 'parallel', 'choice', 'loop'] if col in requested_alpha_features]
+                alpha_df = alpha_df[alpha_cols]
+                for col in alpha_df.columns:
+                    process_features_dict[col] = alpha_df[[col]]
+            except Exception as e:
+                print("Error in alpha relations representation: ", requested_alpha_features)
+                print("Error: ", e)
+
         # Add time features
-        for method, time_feature in self.time_features:
+        for method, time_feature in time_features:
             try:
                 process_features_dict[f"{method}_{time_feature}"] = getattr(TMPD_process_features, "get_feature_" + method)(process_representation_df, transition_log, method, time_feature)
             except Exception as e:
@@ -261,7 +294,7 @@ class TMPD:
                 print("Error: ", e)
 
         # Add resource features
-        for method, resource_feature in self.resource_features:
+        for method, resource_feature in resource_features:
             try:
                 process_features_dict[f"{method}_{resource_feature}"] = getattr(TMPD_process_features, "get_feature_" + method)(process_representation_df, transition_log, method, resource_feature)
             except Exception as e:
@@ -269,7 +302,7 @@ class TMPD:
                 print("Error: ", e)
 
         # Add data features
-        for method, data_feature in self.data_features:
+        for method, data_feature in data_features:
             try:
                 process_features_dict[f"{method}_{data_feature}"] = getattr(TMPD_process_features, "get_feature_" + method)(process_representation_df, transition_log, method, data_feature)
             except Exception as e:
@@ -591,19 +624,17 @@ class TMPD:
             self.get_windowing_strategy()[self.reference_window_index_localization]['start']:
             self.get_windowing_strategy()[self.reference_window_index_localization]['end']
         ]
-        self.run_process_representation(reference_window_data)
+        self.run_process_representation(reference_window_data, control_flow_features={'frequency', 'percentual', 'causality', 'parallel', 'choice', 'loop'}, time_features={}, resource_features={}, data_features={})
         reference_transition_matrix = self.get_process_representation()
         reference_transition_matrix = reference_transition_matrix.reset_index()
-        reference_transition_matrix = reference_transition_matrix[['activity_from', 'activity_to', 'frequency', 'percentual']]
 
         detection_window_data = self.transition_log.iloc[
             self.get_windowing_strategy()[self.detection_window_index_localization]['start']:
             self.get_windowing_strategy()[self.detection_window_index_localization]['end']
         ]
-        self.run_process_representation(detection_window_data)
+        self.run_process_representation(detection_window_data, control_flow_features={'frequency', 'percentual', 'causality', 'parallel', 'choice', 'loop'}, time_features={}, resource_features={}, data_features={})
         detection_transition_matrix = self.get_process_representation()
         detection_transition_matrix = detection_transition_matrix.reset_index()
-        detection_transition_matrix = detection_transition_matrix[['activity_from', 'activity_to', 'frequency', 'percentual']]
         
         # Prepare the comprehensive characterization prompt
         self.llm_characterization_prompt = TMPD_understanding_tasks.llm_characterization_prompt(
@@ -657,58 +688,58 @@ class TMPD:
         # TODO: Implement actual return value
         return pd.DataFrame()
 
-    def set_characterization_task_phd(self, llm_company: str = "google", llm_model: str = "gemini-2.0-flash", 
-                                     api_key_path: Optional[str] = None, llm_instructions_path: Optional[str] = None) -> None:
-        """
-        Configures the PhD-level characterization task parameters for LLM-based analysis.
+    # def set_characterization_task_phd(self, llm_company: str = "google", llm_model: str = "gemini-2.0-flash", 
+    #                                  api_key_path: Optional[str] = None, llm_instructions_path: Optional[str] = None) -> None:
+    #     """
+    #     Configures the PhD-level characterization task parameters for LLM-based analysis.
         
-        Args:
-            llm_company (str): LLM provider company. Defaults to "google".
-            llm_model (str): LLM model name. Defaults to "gemini-2.0-flash".
-            api_key_path (str, optional): Path to API key file. Defaults to None.
-            llm_instructions_path (str, optional): Path to LLM instructions file. Defaults to None.
-        """
-        self.llm_company = llm_company
-        self.llm_model = llm_model
-        self.llm = TMPD_understanding_tasks.llm_instanciating(llm_company, llm_model, api_key_path)
+    #     Args:
+    #         llm_company (str): LLM provider company. Defaults to "google".
+    #         llm_model (str): LLM model name. Defaults to "gemini-2.0-flash".
+    #         api_key_path (str, optional): Path to API key file. Defaults to None.
+    #         llm_instructions_path (str, optional): Path to LLM instructions file. Defaults to None.
+    #     """
+    #     self.llm_company = llm_company
+    #     self.llm_model = llm_model
+    #     self.llm = TMPD_understanding_tasks.llm_instanciating(llm_company, llm_model, api_key_path)
 
-        # Load LLM Instructions json and add contextualized informations
-        self.llm_instructions = TMPD_understanding_tasks.llm_instructions_load(llm_instructions_path)
+    #     # Load LLM Instructions json and add contextualized informations
+    #     self.llm_instructions = TMPD_understanding_tasks.llm_instructions_load(llm_instructions_path)
 
-    def run_characterization_task_phd(self) -> None:
-        """
-        Executes the PhD-level characterization task using LLM-based analysis.
-        """
-        ### BPMN analysis
-        # Prepare the prompt
-        self.llm_bpmn_analysis_prompt = TMPD_understanding_tasks.llm_bpmn_analysis_prompt(self.llm_instructions, self.reference_bpmn_text, self.detection_bpmn_text)
-        print("################################ llm_bpmn_analysis_prompt #####################################")
-        print(self.llm_bpmn_analysis_prompt)
-        # Call LLM response
-        self.llm_bpmn_analysis_response = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, self.llm_bpmn_analysis_prompt)
-        print("################################ llm_bpmn_analysis_response #####################################")
-        print(self.llm_bpmn_analysis_response)
+    # def run_characterization_task_phd(self) -> None:
+    #     """
+    #     Executes the PhD-level characterization task using LLM-based analysis.
+    #     """
+    #     ### BPMN analysis
+    #     # Prepare the prompt
+    #     self.llm_bpmn_analysis_prompt = TMPD_understanding_tasks.llm_bpmn_analysis_prompt(self.llm_instructions, self.reference_bpmn_text, self.detection_bpmn_text)
+    #     print("################################ llm_bpmn_analysis_prompt #####################################")
+    #     print(self.llm_bpmn_analysis_prompt)
+    #     # Call LLM response
+    #     self.llm_bpmn_analysis_response = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, self.llm_bpmn_analysis_prompt)
+    #     print("################################ llm_bpmn_analysis_response #####################################")
+    #     print(self.llm_bpmn_analysis_response)
 
-        ### Classification prompt
-        # Prepare the prompt
-        self.llm_classification_prompt = TMPD_understanding_tasks.llm_classification_prompt(self.llm_instructions, self.high_level_changes, self.reference_bpmn_text, self.detection_bpmn_text, self.llm_bpmn_analysis_response) 
-        print("################################ llm_classification_prompt #####################################")
-        print(self.llm_classification_prompt)
-        # Call LLM response
-        self.characterization_classification_response = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, self.llm_classification_prompt) 
-        print("################################ characterization_classification_response #####################################")
-        print(self.characterization_classification_response)
+    #     ### Classification prompt
+    #     # Prepare the prompt
+    #     self.llm_classification_prompt = TMPD_understanding_tasks.llm_classification_prompt(self.llm_instructions, self.high_level_changes, self.reference_bpmn_text, self.detection_bpmn_text, self.llm_bpmn_analysis_response) 
+    #     print("################################ llm_classification_prompt #####################################")
+    #     print(self.llm_classification_prompt)
+    #     # Call LLM response
+    #     self.characterization_classification_response = TMPD_understanding_tasks.llm_call_response(self.llm_company, self.llm_model, self.llm, self.llm_classification_prompt) 
+    #     print("################################ characterization_classification_response #####################################")
+    #     print(self.characterization_classification_response)
 
-        # Call LLM classification formatting
-        self.characterization_classification_dict = TMPD_understanding_tasks.llm_classification_formatting(self.characterization_classification_response)
-        print("################################ characterization_classification_dict #####################################")
-        print(self.characterization_classification_dict)
+    #     # Call LLM classification formatting
+    #     self.characterization_classification_dict = TMPD_understanding_tasks.llm_classification_formatting(self.characterization_classification_response)
+    #     print("################################ characterization_classification_dict #####################################")
+    #     print(self.characterization_classification_dict)
 
-    def get_characterization_task_phd(self) -> tuple:
-        """
-        Retrieves the results of the PhD-level characterization task.
+    # def get_characterization_task_phd(self) -> tuple:
+    #     """
+    #     Retrieves the results of the PhD-level characterization task.
         
-        Returns:
-            tuple: (characterization_classification_dict, characterization_classification_response, llm_bpmn_analysis_response)
-        """
-        return self.characterization_classification_dict, self.characterization_classification_response, self.llm_bpmn_analysis_response
+    #     Returns:
+    #         tuple: (characterization_classification_dict, characterization_classification_response, llm_bpmn_analysis_response)
+    #     """
+    #     return self.characterization_classification_dict, self.characterization_classification_response, self.llm_bpmn_analysis_response
