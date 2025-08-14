@@ -11,85 +11,115 @@ import datetime
 from scipy.stats import entropy
 from collections import defaultdict
 import networkx as nx
+from itertools import combinations
 
 
 def get_feature_alpha_relations(TM_df_original, control_flow_feature=None,
                                 max_loop_len: int = 4):
     """
+    Derives process mining relations from a transition matrix, with a refined
+    definition for the choice relation based on XOR gateway detection and 2-4 node cycles for loops.
+
     Returns: DataFrame with columns
-             ['causality', 'parallel', 'choice', 'self_loop', 'loop']
-             where 'loop' = any edge that belongs to a self-loop OR to a
-             simple cycle of length 2-max_loop_len.
+             ['direct_succession', 'causality', 'parallel', 'choice', 'loop']
     """
     TM_df = TM_df_original.copy().reset_index()
-    TM_df['prob'] = (
-        TM_df.groupby('activity_from')['frequency']
-              .transform(lambda x: x / x.sum())
-    )
 
-    transitions = set(zip(TM_df['activity_from'], TM_df['activity_to']))
+    # Initial Data Preparation
+    all_transitions = set(zip(TM_df['activity_from'], TM_df['activity_to']))
     out_map = TM_df.groupby('activity_from')['activity_to'].apply(set).to_dict()
-    prob_map = TM_df.set_index(['activity_from', 'activity_to'])['prob'].to_dict()
-    # ------------------------------------------------------------------#
-    # -------- 1. EXISTING RELATIONS (unchanged) ----------------------- #
-    # ------------------------------------------------------------------#
-    causality, parallel, choice, self_loop = set(), set(), set(), set()
 
-    # causality ---------------------------------------------------------
+    # ------------------------------------------------------------------#
+    # -------- CALCULATE RELATIONS BASED ON DEFINITIONS ----------------#
+    # ------------------------------------------------------------------#
+
+    # Causality (a -> b): 'b' is the ONLY successor of 'a'.
+    causality = set()
     for a, outs in out_map.items():
         if len(outs) == 1:
             b = next(iter(outs))
-            if a != b and prob_map[(a, b)] == 1.0:
+            if a != b:
                 causality.add((a, b))
 
-    # choice ------------------------------------------------------------
-    for a, outs in out_map.items():
-        if len(outs) > 1:
-            choice.update({(a, b) for b in outs if a != b})
+    # Choice (XOR Gateways)
+    choice = set()
+    xor_gateways = set() # We need to store the gateway nodes
+    potential_splits = {a for a, outs in out_map.items() if len(outs) > 1}
+    for a in potential_splits:
+        successors = out_map[a]
+        is_mutually_exclusive = True
+        for s1, s2 in combinations(successors, 2):
+            if (s1, s2) in all_transitions or (s2, s1) in all_transitions:
+                is_mutually_exclusive = False
+                break
+        if is_mutually_exclusive:
+            xor_gateways.add(a) # Found an XOR gateway
+            for b in out_map.get(a, set()):
+                choice.add((a, b))
 
-    # parallel ----------------------------------------------------------
-    for a, b in transitions:
-        if a != b and (b, a) in transitions:
-            if (a, b) not in causality and (b, a) not in causality:
-                parallel.add((a, b))
+    # Parallel (a || b): A pair (a,b) and (b,a) that are NOT causal AND do not originate from a choice gateway.
+    parallel = set()
+    potential_pairs = {(a, b) for a, b in all_transitions if a < b and (b, a) in all_transitions}
+    for a, b in potential_pairs:
+        # Condition 1: Neither edge is causal.
+        is_causal = (a, b) in causality or (b, a) in causality
+        # Condition 2: The start of either edge is not a choice gateway.
+        is_from_xor = a in xor_gateways or b in xor_gateways
 
-    # self‑loops --------------------------------------------------------
-    for a, b in transitions:
-        if a == b:
-            self_loop.add((a, b))
+        # Only if it's not causal AND not from an XOR split, it's parallel.
+        if not is_causal and not is_from_xor:
+            parallel.add((a, b))
+            parallel.add((b, a))
 
-    # ------------------------------------------------------------------#
-    # -------- 2.  CYCLE‑BASED LOOPS  (2‑4 nodes) ---------------------- #
-    # ------------------------------------------------------------------#
-    G = nx.DiGraph()
-    G.add_edges_from(transitions)
-
+    # Loops (Self-loops and Cycles)
+    self_loop = {(a, b) for a, b in all_transitions if a == b}
+    G = nx.DiGraph(all_transitions)
     cycle_edges = set()
     for cycle in nx.simple_cycles(G):
         if 2 <= len(cycle) <= max_loop_len:
+            # Add all cycle edges
             cycle_edges.update(
                 (cycle[i], cycle[(i + 1) % len(cycle)]) for i in range(len(cycle))
             )
-
-    # unified loop indicator (include 1‑node self‑loops)
+            # Add back edge for the cycle only
+            # back_edge = (cycle[-1], cycle[0])
+            # cycle_edges.add(back_edge)
     all_loops = cycle_edges | self_loop
 
-    # remove overlaps ---------------------------------------------------
-    causality -= parallel
+    # ------------------------------------------------------------------#
+    # -------- Expand 'parallel' to touch split/join---------------- #
+    # ------------------------------------------------------------------#
+    # Activities that participate in a base parallel pair:
+    base_parallel_nodes = {u for (u, v) in parallel} | {v for (u, v) in parallel}
+
+    # Mark any edge that touches a base parallel node (captures split/join edges).
+    parallel_edges = {e for e in all_transitions if e[0] in base_parallel_nodes or e[1] in base_parallel_nodes}
+
+    # Unified parallel indicator (include edges that touch base parallel nodes)
+    # parallel |= parallel_edges
+
+    # ------------------------------------------------------------------#
+    # -------- RESOLVE FINAL OVERLAPS ----------------------------------#
+    # ------------------------------------------------------------------#
+    # Choice is the most restrictive relation, so remove any overlaps first
     choice -= causality | parallel
-    all_loops -= parallel
+    # Remove any loops that are part of parallel structures
+    all_loops -= parallel | parallel_edges
+    # Direct succession is the fallback.
+    direct_succession = all_transitions - (causality | parallel | choice)
 
     # ------------------------------------------------------------------#
-    # -------- 3.  WRITE BACK TO DATAFRAME ---------------------------- #
+    # -------- WRITE BACK TO DATAFRAME ---------------------------------#
     # ------------------------------------------------------------------#
-    # fast vectorised assignment – avoids 6× .apply()
     idx = list(zip(TM_df['activity_from'], TM_df['activity_to']))
-    TM_df['causality']  = np.fromiter((e in causality  for e in idx), int)
-    TM_df['parallel']   = np.fromiter((e in parallel   for e in idx), int)
-    TM_df['choice']     = np.fromiter((e in choice     for e in idx), int)
-    TM_df['loop']       = np.fromiter((e in all_loops  for e in idx), int)
 
-    return TM_df.set_index(['activity_from', 'activity_to'])[['causality', 'parallel', 'choice', 'loop']]
+    TM_df['causality'] = np.fromiter((e in causality for e in idx), dtype=int)
+    TM_df['parallel'] = np.fromiter((e in parallel for e in idx), dtype=int)
+    TM_df['choice'] = np.fromiter((e in choice for e in idx), dtype=int)
+    TM_df['loop'] = np.fromiter((e in all_loops for e in idx), dtype=int)
+    TM_df['direct_succession'] = np.fromiter((e in direct_succession for e in idx), dtype=int)
+
+    return TM_df.set_index(['activity_from', 'activity_to'])[['direct_succession', 'causality', 'parallel', 'choice', 'loop']]
 
 
 

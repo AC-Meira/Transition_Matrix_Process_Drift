@@ -260,7 +260,7 @@ class TMPD:
         }
 
         # Identify alpha relations
-        alpha_relations = {'causality', 'parallel', 'choice', 'loop'}
+        alpha_relations = {'direct_succession', 'causality', 'parallel', 'choice', 'loop'}
         requested_alpha_features = control_flow_features & alpha_relations
         normal_features = control_flow_features - alpha_relations - {'frequency', 'percentual'}
 
@@ -277,7 +277,7 @@ class TMPD:
             try:
                 alpha_df = TMPD_process_features.get_feature_alpha_relations(process_representation_df)
                 # Only keep requested columns (convert set to sorted list for indexing)
-                alpha_cols = [col for col in ['causality', 'parallel', 'choice', 'loop'] if col in requested_alpha_features]
+                alpha_cols = [col for col in ['direct_succession', 'causality', 'parallel', 'choice', 'loop'] if col in requested_alpha_features]
                 alpha_df = alpha_df[alpha_cols]
                 for col in alpha_df.columns:
                     process_features_dict[col] = alpha_df[[col]]
@@ -624,7 +624,7 @@ class TMPD:
             self.get_windowing_strategy()[self.reference_window_index_localization]['start']:
             self.get_windowing_strategy()[self.reference_window_index_localization]['end']
         ]
-        self.run_process_representation(reference_window_data, control_flow_features={'frequency', 'percentual', 'causality', 'parallel', 'choice', 'loop'}, time_features={}, resource_features={}, data_features={})
+        self.run_process_representation(reference_window_data, control_flow_features={'frequency', 'percentual', 'direct_succession', 'causality', 'parallel', 'choice', 'loop'}, time_features={}, resource_features={}, data_features={})
         reference_transition_matrix = self.get_process_representation()
         reference_transition_matrix = reference_transition_matrix.reset_index()
 
@@ -632,7 +632,7 @@ class TMPD:
             self.get_windowing_strategy()[self.detection_window_index_localization]['start']:
             self.get_windowing_strategy()[self.detection_window_index_localization]['end']
         ]
-        self.run_process_representation(detection_window_data, control_flow_features={'frequency', 'percentual', 'causality', 'parallel', 'choice', 'loop'}, time_features={}, resource_features={}, data_features={})
+        self.run_process_representation(detection_window_data, control_flow_features={'frequency', 'percentual', 'direct_succession', 'causality', 'parallel', 'choice', 'loop'}, time_features={}, resource_features={}, data_features={})
         detection_transition_matrix = self.get_process_representation()
         detection_transition_matrix = detection_transition_matrix.reset_index()
         

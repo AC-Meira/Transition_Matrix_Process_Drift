@@ -86,12 +86,12 @@ main_instructions: |
 
     #### Control-Flow Perspective
     - Explain the structural changes by identifying high-level patterns. Your analysis must focus on the transformation between the old and new process logic.
-        - Reconstruct Local Flows First: For any area with significant changes (a "hotspot"), you MUST first explicitly state the local flow sequence from the reference window and then the new flow sequence from the detection window.
+        - Reconstruct Local Flows First: For any area with significant changes (a "hotspot"), you MUST first explicitly state the local flow sequence (e.g. the parallel block, choice block) from the reference window and then the new flow sequence from the detection window.
         - Characterize the Transformation: Use the flow comparison to synthesize the primary change. Explain the pattern you observe, specially focusing on:
             - Activity Addition/Deletion: If an activity was completely added or removed from the process, describe its role and how it affects the overall flow.
             - Activity Repositioning: An activity is repositioned if its place in the overall sequence changes. This often involves it being removed from its old location and re-inserted elsewhere in the flow with new predecessors/successors. A special case of repositioning is when two activities swap places. 
-            - Introduction/Elimination of Choice (XOR): A decision point where only one of several downstream paths is taken. Activities in a choice are mutually exclusive, so won't have transitions to each other in the Transition Matrix.
-            - Introduction/Elimination of Parallelism (AND): A split where all downstream paths are activated concurrently. Activities in parallel will have transitions to each other, marked as 'Parallel=1' in the Transition Matrix. Additionally, you MUST interpret the gateway leading into them as a Parallel Split and the gateway leading out of them as a Parallel Join, even if its own outgoing transitions are marked as `choice=1`.
+            - Introduction/Elimination of Choice (XOR): A decision point where only one of several downstream paths is taken. The outgoing transitions are marked choice=1 in the Transition Matrix and lead to mutually exclusive activities. Activities with multiple outgoing but with 'choice=0' are not considered as Choices (XOR).
+            - Introduction/Elimination of Parallelism (AND): A split where all downstream paths are activated concurrently. Activities in parallel will have transitions to each other, marked as 'Parallel=1' in the Transition Matrix. The activity that initiates these paths should be referred to as a 'Parallel' or 'AND' split.
             - Introduction/Elimination of a Bypass: A bypass should only be described if a new path allows one or more activities to be skipped entirely (i.e., made optional or removed from a path, not just moved).
             - Introduction/Elimination of a Loop: A loop involves returning to a previous step within that same case according to the new process flow.
 
