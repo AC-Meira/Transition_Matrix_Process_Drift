@@ -266,23 +266,50 @@ def significant_transition_changes_detection(self, reference_transition_matrix, 
         """Classify the perspective of a feature based on its name."""
         # Ensure feature lists are not None
         control_flow_features = self.control_flow_features if self.control_flow_features is not None else []
-        time_features = [feature for feature, _ in self.time_features] if self.time_features is not None else []
-        resource_features = [feature for feature, _ in self.resource_features] if self.resource_features is not None else []
-        data_features = [feature for feature, _ in self.data_features] if self.data_features is not None else []
-        # Control flow features
-        if any(feature.startswith(f) for f in set(control_flow_features)):
+        time_features = self.time_features if self.time_features is not None else []
+        resource_features = self.resource_features if self.resource_features is not None else []
+        data_features = self.data_features if self.data_features is not None else []
+
+        # First check control flow (simple direct match)
+        if feature in control_flow_features:
             return 'control_flow'
-        # Time features
-        elif any(feature.startswith(f) for f in set(time_features)):
-            return 'time'
-        # Resource features
-        elif any(feature.startswith(f) for f in set(resource_features)):
-            return 'resource'
-        # Data features
-        elif any(feature.startswith(f) for f in set(data_features)):
-            return 'data'
-        else:
-            return 'unknown'
+        
+        # Check if it's a compound feature (has underscores)
+        elif '_' in feature:
+            # Split feature parts
+            parts = feature.split('_')
+            method_type = parts[0]  # e.g., 'time', 'numerical', 'categorical'
+            
+            # Time perspective (e.g., "time_avg_timestamp")
+            if method_type == 'time':
+                for method, column in time_features:
+                    if feature == f"{method}_{column}":
+                        return 'time'
+            
+            # Numerical data perspective (e.g., "numerical_avg_Amount")
+            elif method_type == 'numerical':
+                for method, column in data_features:
+                    if feature == f"{method}_{column}":
+                        return 'data'
+            
+            # Categorical perspective (e.g., "categorical_encoding_frequency_Role_Appraiser->Credit Analyst")
+            elif method_type == 'categorical':
+                # Find the position of the last method part (encoding_frequency, encoding_probability, etc)
+                # and the column name to properly handle column values that contain underscores
+                for method, column in resource_features:
+                    method_parts = method.split('_')  # e.g., ['categorical', 'encoding', 'frequency']
+                    feature_prefix = f"{method}_{column}"  # e.g., "categorical_encoding_frequency_role"
+                    if feature.startswith(feature_prefix):
+                        return 'resource'
+                
+                # Then check data features the same way
+                for method, column in data_features:
+                    method_parts = method.split('_')
+                    feature_prefix = f"{method}_{column}"
+                    if feature.startswith(feature_prefix):
+                        return 'data'
+        
+        return 'unknown'
 
     # Initialize a DataFrame to store the results with perspective column
     significant_transition_changes = pd.DataFrame(columns=pd.Index(['transition', 'feature', 'perspective', 'transition_status', 'activity_status', 'p_value', 'effect_size', 'ref_value', 'det_value', 'dif_value']))
@@ -594,7 +621,7 @@ def wrap_text(text, max_length=10):
 
     return wrapped_text
 
-def localization_dfg_visualization(dfg, change_informations, significant_transition_changes, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2"):
+def localization_dfg_visualization(dfg, change_informations, significant_transition_changes, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2", show_annotations=True):
     """
     Visualize the Directly-Follows Graph (DFG) with localization changes.
 
@@ -605,6 +632,7 @@ def localization_dfg_visualization(dfg, change_informations, significant_transit
         rankdir (str): Direction of the graph layout (e.g., 'LR' for left-to-right).
         node_penwidth (str): Pen width for nodes.
         edge_penwidth (str): Pen width for edges.
+        show_annotations (bool): Whether to show change annotations in the DFG. Defaults to True.
 
     Returns:
         None: Displays the graph inline in Jupyter Notebook.
@@ -678,16 +706,14 @@ def localization_dfg_visualization(dfg, change_informations, significant_transit
         elif (source, target) in edge_annotations:
             edge_color = 'orange'
 
-        # Add edges
-        if (source, target) in edge_annotations:
+            # Add edges
+        if show_annotations and (source, target) in edge_annotations:
             dot.edge(source, target
                     , label="Freq: " + str(count) + '\nDif. in '
                         + '\nDif. in '.join(edge_annotations[(source, target)])
                     , color=edge_color, penwidth=edge_penwidth) 
         else: 
-            dot.edge(source, target, label="Freq: " + str(count), color=edge_color, penwidth=edge_penwidth)
-
-    # Connect the start node to the real start activities and the real end activities to the end node
+            dot.edge(source, target, label="Freq: " + str(count), color=edge_color, penwidth=edge_penwidth)    # Connect the start node to the real start activities and the real end activities to the end node
     for act in start_activities:
         if act not in end_activities:  # Avoid connecting end activities again
             count = start_activities.get(act, 0)  # Get the count for the activity
@@ -701,7 +727,7 @@ def localization_dfg_visualization(dfg, change_informations, significant_transit
             elif ('START', act) in edge_annotations:
                 edge_color = 'orange'
 
-            if ('START', act) in edge_annotations: 
+            if show_annotations and ('START', act) in edge_annotations: 
                 dot.edge('START', act
                          , label="Freq: " + str(count) + '\nDif. in '
                             + '\nDif. in '.join(edge_annotations[('START', act)])
@@ -722,7 +748,7 @@ def localization_dfg_visualization(dfg, change_informations, significant_transit
             elif (act, 'END') in edge_annotations:
                 edge_color = 'orange'
 
-            if (act, 'END') in edge_annotations: 
+            if show_annotations and (act, 'END') in edge_annotations: 
                 dot.edge(act, 'END'
                          , label="Freq: " + str(count) + '\nDif. in '
                             + '\nDif. in '.join(edge_annotations[(act, 'END')])

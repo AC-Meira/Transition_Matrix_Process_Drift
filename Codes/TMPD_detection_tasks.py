@@ -11,6 +11,7 @@ import sys
 thismodule = sys.modules[__name__]
 import ruptures as rpt
 import operator
+from scipy.signal import find_peaks
 
 def dingOptimalNumberOfPoints(algo):
 
@@ -107,9 +108,20 @@ def get_time_series_strategy(self, detection_task_params_dict):
     # 
     detection_strategy_result_dict = {}
     for detection_feature, detection_feature_params in detection_task_params_dict.items():
-
         try:
-            detection_strategy_result_dict[detection_feature] = getattr(thismodule, "get_" + detection_feature_params['method'])(self, change_representation_df, detection_feature_params)
+            params = detection_feature_params.copy()  # Make a copy to avoid modifying the original
+            
+            # Choose the appropriate method based on window_ref_mode
+            if params['method'] == 'cpd_pelt':
+                if self.window_ref_mode == "Sliding":
+                    method_to_use = 'get_peak_detection'
+                else:
+                    method_to_use = 'get_cpd_pelt'
+            else:
+                method_to_use = 'get_' + params['method']
+            
+            # Call the selected method
+            detection_strategy_result_dict[detection_feature] = getattr(thismodule, method_to_use)(self, change_representation_df, params)
 
         except Exception as e:
             print("Error in get_time_series_strategy: ", detection_feature)
@@ -145,7 +157,65 @@ def get_comparison_operator(change_representation_df, detection_feature_params):
 
     # return indexes of changes
     return result.tolist() + [len(change_representation_df)]
+
+
+def get_peak_detection(self, change_representation_df, detection_feature_params):
+    """
+    Applies peak detection using scipy's find_peaks for detecting changes in sliding window mode.
     
+    Args:
+        change_representation_df (DataFrame): Change representation data.
+        detection_feature_params (dict): Parameters for peak detection, including height, distance, and smoothing.
+    
+    Returns:
+        list: Detected peak locations representing change points.
+    """
+    # Get the defined change feature(s) vector and apply smoothing
+    signals = change_representation_df[detection_feature_params['change_features']].rolling(
+        window=int(detection_feature_params['smooth'])).mean().dropna()
+    
+    # Convert to numpy array if multiple features
+    if len(detection_feature_params['change_features']) > 1:
+        signal_array = signals.mean(axis=1).values
+    else:
+        signal_array = signals.values.flatten()
+    
+    # Set default parameters for find_peaks
+    try: 
+        height = float(detection_feature_params.get('height', 0))
+    except:
+        height = None
+        
+    try:
+        distance = int(detection_feature_params.get('distance', self.window_size/2))
+    except:
+        distance = int(self.window_size/2)
+        
+    try:
+        prominence = float(detection_feature_params.get('prominence', None))
+    except:
+        prominence = None
+    
+    # Find peaks in the signal
+    try:
+        peaks, _ = find_peaks(signal_array, 
+                             height=height,
+                             distance=distance,
+                             prominence=prominence)
+        
+        # Adjust indices for smoothing window and convert to list
+        peaks = [int(p) + int(detection_feature_params['smooth']) for p in peaks]
+        
+        # Add the last point of the signal
+        last_point = len(change_representation_df)
+        if not peaks or peaks[-1] != last_point:
+            peaks.append(last_point)
+            
+    except Exception as e:
+        print("Error in get_peak_detection: ", e)
+        peaks = []
+    
+    return peaks
 
 
 def get_threshold_strategy(self, detection_task_params_dict):

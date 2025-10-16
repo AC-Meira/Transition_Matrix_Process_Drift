@@ -27,7 +27,12 @@ def get_feature_alpha_relations(TM_df_original, control_flow_feature=None,
 
     # Initial Data Preparation
     all_transitions = set(zip(TM_df['activity_from'], TM_df['activity_to']))
+
+    # Map each activity to its direct successors
     out_map = TM_df.groupby('activity_from')['activity_to'].apply(set).to_dict()
+
+    # Create a map of predecessors to check for common split points
+    in_map = TM_df.groupby('activity_to')['activity_from'].apply(set).to_dict()
 
     # ------------------------------------------------------------------#
     # -------- CALCULATE RELATIONS BASED ON DEFINITIONS ----------------#
@@ -41,35 +46,30 @@ def get_feature_alpha_relations(TM_df_original, control_flow_feature=None,
             if a != b:
                 causality.add((a, b))
 
-    # Choice (XOR Gateways)
-    choice = set()
-    xor_gateways = set() # We need to store the gateway nodes
-    potential_splits = {a for a, outs in out_map.items() if len(outs) > 1}
-    for a in potential_splits:
-        successors = out_map[a]
-        is_mutually_exclusive = True
-        for s1, s2 in combinations(successors, 2):
-            if (s1, s2) in all_transitions or (s2, s1) in all_transitions:
-                is_mutually_exclusive = False
-                break
-        if is_mutually_exclusive:
-            xor_gateways.add(a) # Found an XOR gateway
-            for b in out_map.get(a, set()):
-                choice.add((a, b))
 
-    # Parallel (a || b): A pair (a,b) and (b,a) that are NOT causal AND do not originate from a choice gateway.
+    # Parallel (a || b): A pair (a,b) and (b,a) that are NOT causal and share at least one common predecessor.
     parallel = set()
     potential_pairs = {(a, b) for a, b in all_transitions if a < b and (b, a) in all_transitions}
     for a, b in potential_pairs:
-        # Condition 1: Neither edge is causal.
         is_causal = (a, b) in causality or (b, a) in causality
-        # Condition 2: The start of either edge is not a choice gateway.
-        is_from_xor = a in xor_gateways or b in xor_gateways
+        if not is_causal:
+            # Check if the activities share any common predecessors (a split point)
+            preds_a = in_map.get(a, set())
+            preds_b = in_map.get(b, set())
+            if preds_a.intersection(preds_b):
+                parallel.add((a, b))
+                parallel.add((b, a))
 
-        # Only if it's not causal AND not from an XOR split, it's parallel.
-        if not is_causal and not is_from_xor:
-            parallel.add((a, b))
-            parallel.add((b, a))
+
+    # Choice: Any transition from an activity with multiple successors.
+    choice = set()
+    # Find all nodes that are split points (have more than one successor).
+    split_gateways = {a for a, outs in out_map.items() if len(outs) > 1}
+    # Add all outgoing transitions from these gateways to the choice set.
+    for gateway in split_gateways:
+        for successor in out_map.get(gateway, set()):
+            choice.add((gateway, successor))
+
 
     # Loops (Self-loops and Cycles)
     self_loop = {(a, b) for a, b in all_transitions if a == b}
@@ -103,10 +103,11 @@ def get_feature_alpha_relations(TM_df_original, control_flow_feature=None,
     # ------------------------------------------------------------------#
     # Choice is the most restrictive relation, so remove any overlaps first
     choice -= causality | parallel
+    # 
+    parallel_edges -= causality
     # Remove any loops that are part of parallel structures
     all_loops -= parallel | parallel_edges
-    # Direct succession is the fallback.
-    direct_succession = all_transitions - (causality | parallel | choice)
+    
 
     # ------------------------------------------------------------------#
     # -------- WRITE BACK TO DATAFRAME ---------------------------------#
@@ -114,12 +115,11 @@ def get_feature_alpha_relations(TM_df_original, control_flow_feature=None,
     idx = list(zip(TM_df['activity_from'], TM_df['activity_to']))
 
     TM_df['causality'] = np.fromiter((e in causality for e in idx), dtype=int)
-    TM_df['parallel'] = np.fromiter((e in parallel for e in idx), dtype=int)
+    TM_df['parallel'] = np.fromiter((e in parallel or e in parallel_edges for e in idx), dtype=int)
     TM_df['choice'] = np.fromiter((e in choice for e in idx), dtype=int)
     TM_df['loop'] = np.fromiter((e in all_loops for e in idx), dtype=int)
-    TM_df['direct_succession'] = np.fromiter((e in direct_succession for e in idx), dtype=int)
 
-    return TM_df.set_index(['activity_from', 'activity_to'])[['direct_succession', 'causality', 'parallel', 'choice', 'loop']]
+    return TM_df.set_index(['activity_from', 'activity_to'])[['causality', 'parallel', 'choice', 'loop']]
 
 
 

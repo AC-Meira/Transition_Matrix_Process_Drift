@@ -133,7 +133,7 @@ class TMPD:
             window_size (int): Fixed window size. Ignored if not "Fixed". Defaults to 100.
             window_size_max (int): Max window size for adaptive mode. Defaults to 150.
             window_size_min (int): Min window size for adaptive mode. Defaults to 50.
-            window_ref_mode (str): Reference window mode. Defaults to "Fixed".
+            window_ref_mode (str): Reference window mode. "Fixed" or "Sliding".Defaults to "Fixed".
             overlap (bool): Whether to allow overlapping windows. Defaults to True.
             sliding_step (int): Sliding step size if overlap is True. Defaults to 50.
             continuous (bool): Whether to allow continuous windows. Defaults to True.
@@ -260,7 +260,7 @@ class TMPD:
         }
 
         # Identify alpha relations
-        alpha_relations = {'direct_succession', 'causality', 'parallel', 'choice', 'loop'}
+        alpha_relations = {'causality', 'parallel', 'choice', 'loop'}
         requested_alpha_features = control_flow_features & alpha_relations
         normal_features = control_flow_features - alpha_relations - {'frequency', 'percentual'}
 
@@ -277,7 +277,7 @@ class TMPD:
             try:
                 alpha_df = TMPD_process_features.get_feature_alpha_relations(process_representation_df)
                 # Only keep requested columns (convert set to sorted list for indexing)
-                alpha_cols = [col for col in ['direct_succession', 'causality', 'parallel', 'choice', 'loop'] if col in requested_alpha_features]
+                alpha_cols = [col for col in ['causality', 'parallel', 'choice', 'loop'] if col in requested_alpha_features]
                 alpha_df = alpha_df[alpha_cols]
                 for col in alpha_df.columns:
                     process_features_dict[col] = alpha_df[[col]]
@@ -467,7 +467,8 @@ class TMPD:
     
     def set_localization_task(self, reference_window_index: int, detection_window_index: int, 
                              pvalue_threshold: float = 0.05, effect_threshold: float = 0.2, 
-                             presence_percentage_threshold: float = 0.01, pseudo_count: int = 5) -> None:
+                             presence_percentage_threshold: float = 0.01, pseudo_count: int = 5,
+                             perspectives: Optional[List[str]] = None) -> None:
         """
         Configures the localization task parameters.
         
@@ -478,6 +479,9 @@ class TMPD:
             effect_threshold (float): Effect size threshold. Defaults to 0.2.
             presence_percentage_threshold (float): Minimum presence percentage threshold. Defaults to 0.02.
             pseudo_count (int): Pseudo-count for smoothing. Defaults to 5.
+            perspectives (List[str], optional): List of perspectives to include in the analysis. 
+                                             Can include: 'control_flow', 'time', 'resource', 'data'.
+                                             Defaults to all perspectives if None.
         """
         self.reference_window_index_localization = reference_window_index
         self.detection_window_index_localization = detection_window_index
@@ -485,6 +489,14 @@ class TMPD:
         self.effect_threshold_localization = effect_threshold
         self.pseudo_count_localization = pseudo_count
         self.presence_percentage_threshold_localization = presence_percentage_threshold
+        # Set perspectives, default to all if None
+        all_perspectives = ['control_flow', 'time', 'resource', 'data']
+        self.perspectives_localization = perspectives if perspectives is not None else all_perspectives
+        # Validate perspectives
+        if perspectives is not None:
+            invalid_perspectives = set(perspectives) - set(all_perspectives)
+            if invalid_perspectives:
+                raise ValueError(f"Invalid perspectives: {invalid_perspectives}. Must be one or more of {all_perspectives}")
 
     def run_localization_task(self) -> None:
         """
@@ -527,17 +539,23 @@ class TMPD:
         # Get significant transition changes list
         self.significant_transition_changes = TMPD_understanding_tasks.significant_transition_changes_detection(self, reference_transition_matrix, detection_transition_matrix, features_windows, dfg_changes)
 
-        # Filter out perspective feature changes for new or deleted transitions
+        # Filtering only the perspectives selected for the localization task
+        if isinstance(self.significant_transition_changes, pd.DataFrame):
+            self.significant_transition_changes = self.significant_transition_changes[
+                self.significant_transition_changes['perspective'].isin(self.perspectives_localization)
+            ].reset_index(drop=True) 
+
+        # # Filter out perspective feature changes for new or deleted transitions
         # new_transitions = set(dfg_changes.get('New transitions added to the process', []))
         # deleted_transitions = set(dfg_changes.get('Deleted transitions from the process', []))
         # new_deleted_transitions = list(new_transitions | deleted_transitions)
 
         # # Filter based on perspective column - exclude perspective features for new/deleted transitions
         # mask = ~(
-        #     self.changed_transitions['transition'].isin(new_deleted_transitions)
-        #     & self.changed_transitions['perspective'].isin(['control_flow', 'time', 'resource', 'data'])
+        #     self.significant_transition_changes['transition'].isin(new_deleted_transitions)
+        #     & ~self.significant_transition_changes['perspective'].isin(self.perspectives_localization)
         # )
-        # self.changed_transitions = self.changed_transitions[mask].reset_index(drop=True)
+        # self.significant_transition_changes = self.significant_transition_changes[mask].reset_index(drop=True)
 
         # Converting significant transition changes list to a dict
         significant_transition_changes_dict = {}
@@ -558,7 +576,7 @@ class TMPD:
         self.high_level_changes = significant_transition_changes_dict | dfg_changes
 
     def get_localization_task(self, show_localization_dfg: bool = True, show_original_dfg: bool = False, 
-                             show_original_bpmn: bool = False) -> tuple:
+                             show_original_bpmn: bool = False, show_annotations: bool = True) -> tuple:
         """
         Retrieves the results of the localization task.
         
@@ -566,6 +584,7 @@ class TMPD:
             show_localization_dfg (bool): Whether to show DFGs with localization results. Defaults to True.
             show_original_dfg (bool): Whether to show original DFGs. Defaults to False.
             show_original_bpmn (bool): Whether to show original BPMN diagrams. Defaults to False.
+            show_annotations (bool): Whether to show annotations of the changes in the DFG. Defaults to True.
             
         Returns:
             tuple: (significant_transition_changes, high_level_changes, reference_bpmn_text, detection_bpmn_text, window_info)
@@ -590,8 +609,8 @@ class TMPD:
 
         # Show DFGs with Localization results
         if show_localization_dfg:
-            TMPD_understanding_tasks.localization_dfg_visualization(self.reference_dfg, self.high_level_changes, self.significant_transition_changes, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2")
-            TMPD_understanding_tasks.localization_dfg_visualization(self.detection_dfg, self.high_level_changes, self.significant_transition_changes, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2")
+            TMPD_understanding_tasks.localization_dfg_visualization(self.reference_dfg, self.high_level_changes, self.significant_transition_changes, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2", show_annotations=show_annotations)
+            TMPD_understanding_tasks.localization_dfg_visualization(self.detection_dfg, self.high_level_changes, self.significant_transition_changes, bgcolor="white", rankdir="LR", node_penwidth="2", edge_penwidth="2", show_annotations=show_annotations)
 
         
         return self.significant_transition_changes, self.high_level_changes, self.reference_bpmn_text, self.detection_bpmn_text
@@ -624,7 +643,7 @@ class TMPD:
             self.get_windowing_strategy()[self.reference_window_index_localization]['start']:
             self.get_windowing_strategy()[self.reference_window_index_localization]['end']
         ]
-        self.run_process_representation(reference_window_data, control_flow_features={'frequency', 'percentual', 'direct_succession', 'causality', 'parallel', 'choice', 'loop'}, time_features={}, resource_features={}, data_features={})
+        self.run_process_representation(reference_window_data, control_flow_features={'frequency', 'percentual', 'causality', 'parallel', 'choice', 'loop'}, time_features={}, resource_features={}, data_features={})
         reference_transition_matrix = self.get_process_representation()
         reference_transition_matrix = reference_transition_matrix.reset_index()
 
@@ -632,7 +651,7 @@ class TMPD:
             self.get_windowing_strategy()[self.detection_window_index_localization]['start']:
             self.get_windowing_strategy()[self.detection_window_index_localization]['end']
         ]
-        self.run_process_representation(detection_window_data, control_flow_features={'frequency', 'percentual', 'direct_succession', 'causality', 'parallel', 'choice', 'loop'}, time_features={}, resource_features={}, data_features={})
+        self.run_process_representation(detection_window_data, control_flow_features={'frequency', 'percentual', 'causality', 'parallel', 'choice', 'loop'}, time_features={}, resource_features={}, data_features={})
         detection_transition_matrix = self.get_process_representation()
         detection_transition_matrix = detection_transition_matrix.reset_index()
         

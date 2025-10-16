@@ -73,9 +73,9 @@ main_instructions: |
     ## 2. Core Analytical Principles (Follow Strictly)
 
     - **Strictly Adhere to Provided Data**: You MUST NOT infer, speculate, or comment on any perspective if no data is provided for it. If a perspective has no significant changes, state: "**No significant changes were detected for this perspective.**"
-    - **Analyze from the Detection Window's Perspective**: Your entire analysis must be based on the process structure as defined in the **Detection Window (the new reality)**. First, establish the new flow, then explain how it differs from the old one.
-    - **Use Precise Terminology**: Your audience is an expert. Use precise process mining terms.
-    - **Synthesize, Don't List**: Your main task is to identify high-level patterns. Group related changes to explain the larger transformation they represent.
+    - **Analyze from the Detection Window's Perspective**: Your entire analysis must be based on the process structure as defined in the **Detection Window (the new reality)**. First, establish the old flow, then explain the new flow and how it differs from the old one.
+    - **Use Precise Terminology**:  Your audience consists of process managers and business experts. Use precise process mining terms (e.g., "parallel (AND)", "conditional (XOR)") and basic numerical evidence (e.g., frequencies, probabilities). You can reasoning based on all provided data, but avoid answer using too much technical information like data flags (e.g., 'choice=1', 'parallel=1', etc.) or complex statistics (e.g., p-values, effect sizes).
+    - **Synthesize, Don't List**: Your main task is to identify high-level patterns. Group related changes to explain the larger transformation they represent. 
 
     ## 3. Analysis Workflow & Output Structure
 
@@ -85,29 +85,34 @@ main_instructions: |
     - Analyze and interpret the changes across all available perspectives, using the specific pattern interpretation rules below.
 
     #### Control-Flow Perspective
-    - Explain the structural changes by identifying high-level patterns. Your analysis must focus on the transformation between the old and new process logic.
-        - Reconstruct Local Flows First: For any area with significant changes (a "hotspot"), you MUST first explicitly state the local flow sequence (e.g. the parallel block, choice block) from the reference window and then the new flow sequence from the detection window.
+    - Explain the most significant structural transformations by identifying high-level patterns. Your analysis must focus on the transformation between the old and new process logic.
+        - Reconstruct Local Flows First: For any area with significant changes (a "hotspot"), you MUST first explicitly state the local flow sequence (e.g. the parallel block, conditional block) from the reference window and then the new flow sequence from the detection window.
         - Characterize the Transformation: Use the flow comparison to synthesize the primary change. Explain the pattern you observe, specially focusing on:
             - Activity Addition/Deletion: If an activity was completely added or removed from the process, describe its role and how it affects the overall flow.
-            - Activity Repositioning: An activity is repositioned if its place in the overall sequence changes. This often involves it being removed from its old location and re-inserted elsewhere in the flow with new predecessors/successors. A special case of repositioning is when two activities swap places. 
-            - Introduction/Elimination of Choice (XOR): A decision point where only one of several downstream paths is taken. The outgoing transitions are marked choice=1 in the Transition Matrix and lead to mutually exclusive activities. Activities with multiple outgoing but with 'choice=0' are not considered as Choices (XOR).
-            - Introduction/Elimination of Parallelism (AND): A split where all downstream paths are activated concurrently. Activities in parallel will have transitions to each other, marked as 'Parallel=1' in the Transition Matrix. The activity that initiates these paths should be referred to as a 'Parallel' or 'AND' split.
+            - Activity Repositioning: An activity is repositioned if its place in the overall sequence changes. This often involves it being removed from its old location and re-inserted elsewhere in the flow with new predecessors/successors. Show all important repositions. A special case of repositioning is when two activities (or groups) swap places.
+            - Introduction/Elimination of Conditional (XOR): A conditional block is a structure where only one of several downstream paths is taken. The outgoing transitions from its split (start) gateway are uniquely identified by having 'choice=1' while other flags like 'parallel' and 'causality' are '0'.
+            - Introduction/Elimination of Parallel (AND): A Parallel block is a structure that allows multiple activities to occur simultaneously. The Parallel Activities themselves have reciprocal transitions flagged only with 'parallel=1'. You must explicity identify the Parallel Split (start), whose outgoing transitions to the parallel branches are flagged with both 'choice=1' and 'parallel=1', and the Parallel Join (end), whose incoming transitions from those branches share the same flags.
             - Introduction/Elimination of a Bypass: A bypass should only be described if a new path allows one or more activities to be skipped entirely (i.e., made optional or removed from a path, not just moved).
-            - Introduction/Elimination of a Loop: A loop involves returning to a previous step within that same case according to the new process flow.
+            - Introduction/Elimination of a Loop: This involves returning to a previous step. A transition is part of a loop block if it has 'loop=1'. This can occur alongside 'choice=1' or 'causality=1'.
 
     #### Time Perspective
+    - Explain the most significant time transformations by identifying high-level patterns. Your analysis must focus on the transformation between the old and new process logic.
         - Explain how timing changed: are there new bottlenecks (delays) or accelerations? Is there more or less variation in processing times?
         - Ground every claim in numerical evidence from the data sources.
         - Example Narrative: "**Widespread Process Acceleration:** The process has become significantly faster, particularly in the early stages. For instance, the mean duration of the transition from 'Activity A' to 'Activity B' decreased from 5 days to 2 days. This pattern of acceleration is also observed for transitions 'Activity B' -> 'Activity C' and 'Activity B' -> 'Activity D', suggesting a systemic improvement rather than an isolated one."
 
     #### Resource Perspective
+    - Explain the most significant resource transformations by identifying high-level patterns. Your analysis must focus on the transformation between the old and new process logic.
         - Highlight shifts in how work is allocated.
         - Describe changes in team or role involvement and the organizational implications.
+        - **Important Clarification:** When categorical encodings are shown in the format `Role_X->Role_Y`, this does **not** represent a change from Role_X to Role_Y. Instead, it represents the pair of roles assigned to the two activities connected by the transition: `Role_X` for the source activity and `Role_Y` for the target activity. Therefore, a deleted pair means that one of the activities had its role changed, not that Role_X was "replaced" by Role_Y.
         - Example Narrative: "**Consolidation of Responsibilities:** Work on a specific sub-task has been consolidated. Previously, the transition from 'Activity C' to 'Activity D' was handled by both 'Role X' and 'Role Y'. Now, it is exclusively handled by 'Team Z', indicating a centralization of this function."
 
     #### Data Perspective
+    - Explain the most significant data transformations by identifying high-level patterns. Your analysis must focus on the transformation between the old and new process logic.
         - Interpret changes in data attribute values between activities.
         - Focus on shifts that indicate changes in process logic or data handling.
+        - **Important Clarification:** For categorical encodings in the format `Value_X->Value_Y`, interpret this as the combination of attribute values across the two connected activities (Value_X for the source activity, Value_Y for the target). A new or deleted pair reflects that the attribute of one of the activities changed.
         - Example Narrative: "**Shift in a Critical Data Threshold:** The average value of 'Attribute_1' for transitions leading to 'Activity E' has increased from 100 to 500. This suggests that the data-based condition for triggering this path has been significantly altered, changing the logic of which cases are routed to 'Activity E'."
 
     #### Cross-Perspective Insights
